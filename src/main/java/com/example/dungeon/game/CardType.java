@@ -1,4 +1,7 @@
 package com.example.dungeon.game;
 
-public class CardType {
+public enum CardType {
+    ATTACK, // Атака (2 урона)
+    DEFENSE, // Защита (+1 щит)
+    HEAL // Лечение (+1 ХП)
 }
