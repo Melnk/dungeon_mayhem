@@ -10,7 +10,8 @@ public class Main extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception {
-        Parent root = FXMLLoader.load(getClass().getResource("/fxml/main_menu.fxml"));
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/main_menu.fxml"));
+        Parent root = loader.load();
         primaryStage.setTitle("Dungeon Mayhem - Главное меню");
         primaryStage.setScene(new Scene(root, 800, 600));
         primaryStage.setMinWidth(800);
