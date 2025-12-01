@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.*?>
+
+<VBox xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.example.dungeon.ui.MainMenuController"
+      spacing="20" style="-fx-background-color: #2b2b2b; -fx-padding: 20;">
+
+    <!-- Исправленная строка: просто указываем путь к CSS -->
+    <stylesheets>
+        <String fx:value="@../styles/main.css" />
+    </stylesheets>
+
+    <Label text="Dungeon Mayhem" style="-fx-text-fill: white; -fx-font-size: 32; -fx-font-weight: bold;">
+        <font>
+            <Font name="System Bold" size="32.0" />
+        </font>
+    </Label>
+
+    <HBox spacing="20">
+        <!-- Левая панель - управление игрой -->
+        <VBox spacing="15" prefWidth="300">
+            <Label text="Игра" style="-fx-text-fill: white; -fx-font-size: 18;"/>
+
+            <Button text="Создать сервер" onAction="#createServer"
+                    style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14;"
+                    prefWidth="200" prefHeight="40"/>
+
+            <HBox spacing="10">
+                <TextField fx:id="ipAddressField" promptText="IP адрес"
+                           prefWidth="140" prefHeight="40"/>
+                <Button text="Подключиться" onAction="#connectToServer"
+                        style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-size: 14;"
+                        prefWidth="120" prefHeight="40"/>
+            </HBox>
+
+            <Button text="Начать игру" onAction="#startGame"
+                    style="-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14;"
+                    prefWidth="200" prefHeight="40"/>
+
+            <Label fx:id="connectionStatus" text="Не подключено"
+                   style="-fx-text-fill: #ff4444; -fx-font-size: 12;"/>
+        </VBox>
+
+        <!-- Правая панель - общий чат -->
+        <VBox spacing="10" VBox.vgrow="ALWAYS">
+            <Label text="Общий чат" style="-fx-text-fill: white; -fx-font-size: 18;"/>
+
+            <TextArea fx:id="chatArea" editable="false"
+                      style="-fx-control-inner-background: #1e1e1e; -fx-text-fill: white;"
+                      VBox.vgrow="ALWAYS"/>
+
+            <HBox spacing="10">
+                <TextField fx:id="messageField" promptText="Введите сообщение..."
+                           HBox.hgrow="ALWAYS" onAction="#sendMessage"/>
+                <Button text="Отправить" onAction="#sendMessage"
+                        style="-fx-background-color: #666; -fx-text-fill: white;"/>
+            </HBox>
+        </VBox>
+    </HBox>
+</VBox>
