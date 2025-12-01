@@ -1,13 +1,108 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import java.lang.*?>
-<?import java.util.*?>
-<?import javafx.scene.*?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.canvas.Canvas?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
 
-<AnchorPane xmlns="http://javafx.com/javafx"
-            xmlns:fx="http://javafx.com/fxml"
-            prefHeight="400.0" prefWidth="600.0">
+<?import java.net.URL?>
+<BorderPane xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.example.dungeon.ui.GameController"
+            style="-fx-background-color: #1a1a2e;">
 
-</AnchorPane>
+    <stylesheets>
+        <URL value="@../styles/game.css" />
+    </stylesheets>
+
+    <!-- Верхняя панель - информация об игре -->
+    <top>
+        <HBox spacing="20" style="-fx-background-color: #16213e; -fx-padding: 15;">
+            <VBox spacing="5">
+                <Label text="Ваш герой" style="-fx-text-fill: white; -fx-font-size: 14;"/>
+                <HBox spacing="10">
+                    <VBox spacing="2">
+                        <Label fx:id="playerHealthLabel" text="HP: 10" style="-fx-text-fill: #4CAF50; -fx-font-weight: bold;"/>
+                        <Label fx:id="playerShieldLabel" text="Щиты: 0" style="-fx-text-fill: #2196F3;"/>
+                    </VBox>
+                    <Canvas fx:id="playerHealthCanvas" width="150" height="20"/>
+                </HBox>
+            </VBox>
+
+            <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
+                <Label fx:id="gameStatusLabel" text="Ожидание начала игры..."
+                       style="-fx-text-fill: #FFD700; -fx-font-size: 16; -fx-font-weight: bold;"/>
+                <Label fx:id="turnIndicator" text="" style="-fx-text-fill: #FF9800;"/>
+            </VBox>
+
+            <VBox spacing="5">
+                <Label text="Противник" style="-fx-text-fill: white; -fx-font-size: 14;"/>
+                <HBox spacing="10">
+                    <Canvas fx:id="opponentHealthCanvas" width="150" height="20"/>
+                    <VBox spacing="2">
+                        <Label fx:id="opponentHealthLabel" text="HP: 10" style="-fx-text-fill: #4CAF50; -fx-font-weight: bold;"/>
+                        <Label fx:id="opponentShieldLabel" text="Щиты: 0" style="-fx-text-fill: #2196F3;"/>
+                    </VBox>
+                </HBox>
+            </VBox>
+        </HBox>
+    </top>
+
+    <!-- Центральная область - игровое поле -->
+    <center>
+        <VBox spacing="20" alignment="CENTER" style="-fx-padding: 20;">
+            <!-- Карты противника -->
+            <VBox spacing="10" alignment="CENTER">
+                <Label text="Карты противника" style="-fx-text-fill: #888; -fx-font-size: 12;"/>
+                <HBox fx:id="opponentCardsContainer" spacing="10"/>
+            </VBox>
+
+            <!-- Разделитель -->
+            <Separator style="-fx-background-color: #555;"/>
+
+            <!-- Игровая информация -->
+            <VBox spacing="5" alignment="CENTER">
+                <Label fx:id="lastActionLabel" text="" style="-fx-text-fill: #aaa;"/>
+                <Canvas fx:id="battleAnimationCanvas" width="400" height="100" visible="false"/>
+            </VBox>
+
+            <Separator style="-fx-background-color: #555;"/>
+
+            <!-- Ваши карты -->
+            <VBox spacing="10" alignment="CENTER">
+                <Label text="Ваши карты" style="-fx-text-fill: white; -fx-font-size: 14;"/>
+                <HBox fx:id="playerCardsContainer" spacing="15"/>
+            </VBox>
+        </VBox>
+    </center>
+
+    <!-- Правая панель - чат -->
+    <right>
+        <VBox spacing="10" prefWidth="300" style="-fx-background-color: #0f3460; -fx-padding: 15;">
+            <Label text="Боевой чат" style="-fx-text-fill: white; -fx-font-size: 16; -fx-font-weight: bold;"/>
+
+            <TextArea fx:id="gameChatArea" editable="false"
+                      style="-fx-control-inner-background: #1a1a2e; -fx-text-fill: white;"
+                      VBox.vgrow="ALWAYS"/>
+
+            <HBox spacing="10">
+                <TextField fx:id="gameMessageField" promptText="Напишите сообщение..."
+                           HBox.hgrow="ALWAYS" onAction="#sendGameChatMessage"/>
+                <Button text="➤" onAction="#sendGameChatMessage"
+                        style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;"/>
+            </HBox>
+        </VBox>
+    </right>
+
+    <!-- Нижняя панель - кнопки действий -->
+    <bottom>
+        <HBox spacing="20" style="-fx-background-color: #16213e; -fx-padding: 15;" alignment="CENTER">
+            <Button text="Сдаться" onAction="#surrender"
+                    style="-fx-background-color: #f44336; -fx-text-fill: white;"/>
+            <Button text="Правила" onAction="#showRules"
+                    style="-fx-background-color: #9C27B0; -fx-text-fill: white;"/>
+            <Button text="В главное меню" onAction="#returnToMenu"
+                    style="-fx-background-color: #607D8B; -fx-text-fill: white;"/>
+        </HBox>
+    </bottom>
+</BorderPane>

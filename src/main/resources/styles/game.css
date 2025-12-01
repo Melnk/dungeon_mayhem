@@ -1,0 +1,123 @@
+/* Основные стили игры */
+.root {
+    -fx-font-family: "Arial";
+}
+
+/* Стили для карт */
+.card-pane {
+    -fx-background-color: linear-gradient(to bottom, #2c3e50, #34495e);
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-border-color: #7f8c8d;
+    -fx-border-width: 2;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 10, 0, 0, 3);
+    -fx-cursor: hand;
+}
+
+.card-pane:hover {
+    -fx-border-color: #f39c12;
+    -fx-effect: dropshadow(gaussian, rgba(243, 156, 18, 0.7), 15, 0, 0, 5);
+    -fx-translate-y: -5;
+}
+
+.card-pane:pressed {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);
+    -fx-translate-y: 0;
+}
+
+.card-pane.disabled {
+    -fx-opacity: 0.5;
+    -fx-cursor: default;
+}
+
+.card-pane.disabled:hover {
+    -fx-border-color: #7f8c8d;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 10, 0, 0, 3);
+    -fx-translate-y: 0;
+}
+
+/* Стили для меток карт */
+.card-label {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 12;
+    -fx-text-alignment: center;
+}
+
+.card-type-label {
+    -fx-font-size: 10;
+    -fx-text-alignment: center;
+}
+
+/* Стили для кнопок */
+.button {
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+    -fx-cursor: hand;
+    -fx-font-weight: bold;
+    -fx-padding: 8 15;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);
+}
+
+.button:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 8, 0, 0, 3);
+}
+
+/* Стили для TextArea (чат) */
+.text-area {
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+    -fx-border-color: #555;
+}
+
+.text-area .content {
+    -fx-background-color: #1a1a2e;
+    -fx-background-radius: 5;
+    -fx-padding: 10;
+}
+
+.text-area .scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.text-area .scroll-bar:vertical {
+    -fx-background-color: transparent;
+}
+
+.text-area .scroll-bar:vertical .thumb {
+    -fx-background-color: #4a4a6d;
+    -fx-background-radius: 5;
+}
+
+/* Стили для полей ввода */
+.text-field {
+    -fx-background-color: #2d3047;
+    -fx-text-fill: white;
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+    -fx-border-color: #555;
+    -fx-border-width: 1;
+    -fx-padding: 8;
+}
+
+.text-field:focused {
+    -fx-border-color: #4CAF50;
+}
+
+/* Стили для разделителей */
+.separator .line {
+    -fx-border-color: #4a4a6d;
+    -fx-border-width: 1;
+}
+
+/* Анимация пульсации для вашего хода */
+@keyframes pulse {
+    0% { -fx-opacity: 1; }
+    50% { -fx-opacity: 0.7; }
+    100% { -fx-opacity: 1; }
+}
+
+.your-turn {
+    -fx-effect: dropshadow(gaussian, rgba(76, 175, 80, 0.7), 10, 0, 0, 0);
+    animation: pulse 1.5s infinite;
+}

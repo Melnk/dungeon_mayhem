@@ -10,6 +10,7 @@ import java.util.List;
 @Getter
 @Setter
 public class Player implements Serializable {
+    @Setter
     private String name;
     private int health;
     private int shield; // щит, броня, похйу
