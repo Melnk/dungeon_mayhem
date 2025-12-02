@@ -33,7 +33,10 @@ public class Client implements Runnable {
             socket.setSoTimeout(10000); // Таймаут 10 секунд
 
             out = new ObjectOutputStream(socket.getOutputStream());
+            out.flush(); // <- важно: отправляем заголовок немедленно
             in = new ObjectInputStream(socket.getInputStream());
+
+            System.out.println("📡 Client: streams initialized, listening for messages...");
 
             connected = true;
             System.out.println("✅ Успешно подключено к " + host + ":" + port);
@@ -72,6 +75,7 @@ public class Client implements Runnable {
     }
 
     private void processMessage(NetworkMessage message) {
+        System.out.println("📥 Client: получено сообщение: " + message.getType() + " -> " + (message.getData() != null ? message.getData().toString() : "null"));
         if (messageHandler != null) {
             messageHandler.accept(message);
         }
@@ -86,7 +90,8 @@ public class Client implements Runnable {
         try {
             out.writeObject(message);
             out.flush();
-            System.out.println("📤 Сообщение отправлено: " + message.getType());
+            out.reset(); // сбрасываем кэш сериализованных объектов — полезно при повторной отправке тех же объектов
+            System.out.println("📤 Client: отправлено сообщение: " + message.getType() + " -> " + message.getData());
         } catch (IOException e) {
             System.err.println("❌ Ошибка отправки сообщения: " + e.getMessage());
             disconnect();

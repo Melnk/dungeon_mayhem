@@ -32,7 +32,10 @@
             <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
                 <Label fx:id="gameStatusLabel" text="Ожидание начала игры..."
                        style="-fx-text-fill: #FFD700; -fx-font-size: 16; -fx-font-weight: bold;"/>
-                <Label fx:id="turnIndicator" text="" style="-fx-text-fill: #FF9800;"/>
+                <HBox spacing="8" alignment="CENTER">
+                    <Label fx:id="turnIndicator" text="" style="-fx-text-fill: #FF9800;"/>
+                    <Label fx:id="gameTimerLabel" text="00:00" style="-fx-text-fill: #ffffff; -fx-font-weight: bold;"/>
+                </HBox>
             </VBox>
 
             <VBox spacing="5">

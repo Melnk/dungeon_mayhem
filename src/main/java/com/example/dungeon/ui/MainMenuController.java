@@ -1,71 +1,87 @@
 package com.example.dungeon.ui;
 
+import com.example.dungeon.game.GameState;
+import com.example.dungeon.network.*;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.stage.Stage;
-import com.example.dungeon.network.*;
-import javafx.application.Platform;
 
 import java.io.IOException;
-import java.time.LocalTime;
+import java.lang.reflect.Method;
 import java.time.format.DateTimeFormatter;
 
-public class MainMenuController {
+/**
+ * Обновлённый MainMenuController — более тонкая ответственность: UI + делегирование сетевых задач
+ * Сетевые сообщения теперь обрабатывает GameNetworkController (adapter), а чат — ChatService.
+ */
+public class MainMenuController implements GameNetworkController.NetworkListener {
 
     @FXML private TextArea chatArea;
     @FXML private TextField messageField;
     @FXML private TextField ipAddressField;
     @FXML private Label connectionStatus;
 
+    // Состояние/сервисные поля
+    private GameState lastGameState = null;
     private Client client;
     private Server server;
     private Thread serverThread;
     private boolean isServerCreated = false;
     private boolean isClientConnected = false;
 
+    // Компоненты, вынесенные в отдельные классы
+    private ChatService chatService;
+    private GameNetworkController networkController;
+
+    private final DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
+
     @FXML
     public void initialize() {
         System.out.println("🏠 MainMenuController инициализирован");
 
-        // Инициализация чата
-        addChatMessage("🎮 Система", "Добро пожаловать в Dungeon Mayhem!");
-        addChatMessage("ℹ️ Система", "Выберите режим игры:");
-        addChatMessage("ℹ️ Система", "1. Одиночная игра - просто нажмите 'Начать игру'");
-        addChatMessage("ℹ️ Система", "2. Сетевая игра - создайте сервер и подключитесь к нему");
+        // Инициализируем сервис чата
+        this.chatService = new ChatService(chatArea);
 
-        // Устанавливаем дефолтный IP (localhost для тестирования)
+        // Приветственные сообщения
+        chatService.addChatMessage("🎮 Система", "Добро пожаловать в Dungeon Mayhem!");
+        chatService.addChatMessage("ℹ️ Система", "Выберите режим игры:");
+        chatService.addChatMessage("ℹ️ Система", "1. Одиночная игра - просто нажмите 'Начать игру'");
+        chatService.addChatMessage("ℹ️ Система", "2. Сетевая игра - создайте сервер и подключитесь к нему");
+
+        // Дефолтный IP для удобства
         ipAddressField.setText("localhost");
 
-        // Устанавливаем обработчик для поля IP (автоматическое подключение при нажатии Enter)
-        ipAddressField.setOnAction(event -> connectToServer());
+        // Быстрый Enter для полей
+        ipAddressField.setOnAction(e -> connectToServer());
+        messageField.setOnAction(e -> sendMessage());
 
-        // Устанавливаем обработчик для поля сообщения
-        messageField.setOnAction(event -> sendMessage());
+        updateConnectionStatus("Одиночный режим", false);
     }
 
     @FXML
     private void createServer() {
         try {
             if (isServerCreated) {
-                addChatMessage("⚠️ Система", "Сервер уже запущен");
+                chatService.addChatMessage("⚠️ Система", "Сервер уже запущен");
                 return;
             }
 
             server = new Server(12345);
             serverThread = new Thread(server, "Server-Thread");
-            serverThread.setDaemon(true); // Демон-поток (завершится с программой)
+            serverThread.setDaemon(true);
             serverThread.start();
 
             isServerCreated = true;
             updateConnectionStatus("🟢 Сервер запущен", true);
 
-            addChatMessage("✅ Система", "Сервер запущен на порту 12345");
-            addChatMessage("⏳ Система", "Ожидание второго игрока...");
+            chatService.addChatMessage("✅ Система", "Сервер запущен на порту 12345");
+            chatService.addChatMessage("⏳ Система", "Ожидание второго игрока...");
 
-            // Если мы создали сервер, автоматически подключаемся к нему как клиент
+            // Автоматически подключаемся как локальный клиент
             connectAsLocalhost();
 
         } catch (IOException e) {
@@ -74,7 +90,6 @@ public class MainMenuController {
     }
 
     private void connectAsLocalhost() {
-        // Автоматическое подключение к localhost после создания сервера
         Platform.runLater(() -> {
             ipAddressField.setText("localhost");
             connectToServer();
@@ -84,7 +99,7 @@ public class MainMenuController {
     @FXML
     private void connectToServer() {
         if (isClientConnected) {
-            addChatMessage("⚠️ Система", "Уже подключено к серверу");
+            chatService.addChatMessage("⚠️ Система", "Уже подключено к серверу");
             return;
         }
 
@@ -95,82 +110,72 @@ public class MainMenuController {
         }
 
         try {
-            // Создаем клиент с обработчиком сообщений
-            client = new Client(ip, 12345, this::handleNetworkMessage);
+            // Создаём клиент как и раньше — затем оборачиваем в сетевой контроллер
+            client = new Client(ip, 12345, this::rawClientMessageHandler);
             Thread clientThread = new Thread(client, "Client-Thread");
             clientThread.setDaemon(true);
             clientThread.start();
 
+            // GameNetworkController зарегистрирует себя как обработчик низкоуровневых сообщений
+            networkController = new GameNetworkController(client, this);
+
             updateConnectionStatus("🟡 Подключение...", false);
-            addChatMessage("🔄 Система", "Подключение к " + ip + "...");
+            chatService.addChatMessage("🔄 Система", "Подключение к " + ip + "...");
 
         } catch (IOException e) {
             showError("Ошибка создания клиента: " + e.getMessage());
         }
     }
 
-    private void handleNetworkMessage(Object message) {
-        if (message instanceof String) {
-            String msg = (String) message;
-            if (msg.startsWith("CONNECTED:")) {
-                isClientConnected = true;
-                updateConnectionStatus("🟢 Подключено", true);
-                addChatMessage("✅ Система", msg.substring(10));
+    // Небольшой адаптер — клиент может посылать строковые подсказки до инициализации NetworkController.
+    private void rawClientMessageHandler(Object message) {
+        // Мы не рассчитываем на этот канал, но логируем на всякий случай
+        System.out.println("[RAW CLIENT MSG] " + message);
+    }
 
-                // Автоматически начинаем игру при подключении второго игрока
-                if (msg.contains("Игрок 2") && isServerCreated) {
-                    addChatMessage("🎮 Система", "Оба игрока подключены! Игра готова к запуску.");
-                }
+    // GameNetworkController.NetworkListener impl
+    @Override
+    public void onChatMessage(String sender, String message) {
+        chatService.addChatMessage("💬 " + sender, message);
+    }
 
-            } else if (msg.startsWith("DISCONNECTED:")) {
-                isClientConnected = false;
-                updateConnectionStatus("🔴 Отключено", false);
-                addChatMessage("🔌 Система", msg.substring(13));
+    @Override
+    public void onGameUpdate(GameState state) {
+        // Сохраняем последнее состояние для передачи в GameController при старте игры
+        this.lastGameState = state;
+        chatService.addChatMessage("🎮 Система", "Сервер готов к игре!");
+        System.out.println("[MAIN] Сохранено последнее состояние игры (GAME_UPDATE)");
+    }
 
-            } else if (msg.startsWith("ERROR:")) {
-                isClientConnected = false;
-                updateConnectionStatus("🔴 Ошибка", false);
-                showError(msg.substring(6));
+    @Override
+    public void onCardPlayed(com.example.dungeon.game.Card card) {
+        chatService.addChatMessage("🎴 Противник", "сыграл карту: " + card.getName());
+    }
 
-            } else if (msg.startsWith("PLAYER:")) {
-                String playerInfo = msg.substring(7);
-                addChatMessage("👤 Система", playerInfo);
-            }
-        } else if (message instanceof NetworkMessage) {
-            NetworkMessage networkMessage = (NetworkMessage) message;
-            handleNetworkMessageType(networkMessage);
+    @Override
+    public void onConnected(String info) {
+        isClientConnected = true;
+        updateConnectionStatus("🟢 Подключено", true);
+        chatService.addChatMessage("✅ Система", info);
+
+        // Если сервер создан и второй игрок подключился — уведомим
+        if (isServerCreated) {
+            chatService.addChatMessage("🎮 Система", "Оба игрока подключены! Игра готова к запуску.");
         }
     }
 
-    private void handleNetworkMessageType(NetworkMessage message) {
-        Platform.runLater(() -> {
-            try {
-                switch (message.getType()) {
-                    case CHAT_MESSAGE:
-                        String chatMsg = (String) message.getData();
-                        // Проверяем, не наше ли это сообщение
-                        if (!chatMsg.startsWith("Вы:") && !chatMsg.contains("Вы:")) {
-                            addChatMessage("💬 Игрок", chatMsg);
-                        }
-                        break;
+    @Override
+    public void onDisconnected(String reason) {
+        isClientConnected = false;
+        updateConnectionStatus("🔴 Отключено", false);
+        chatService.addChatMessage("🔌 Система", reason);
+    }
 
-                    case PLAYER_JOIN:
-                        String joinMsg = (String) message.getData();
-                        addChatMessage("👥 Система", joinMsg);
-                        break;
-
-                    case GAME_UPDATE:
-                        // При обновлении игры можно предложить начать игру
-                        addChatMessage("🎮 Система", "Сервер готов к игре!");
-                        break;
-
-                    default:
-                        System.out.println("Получено сообщение: " + message.getType());
-                }
-            } catch (Exception e) {
-                System.err.println("Ошибка обработки сетевого сообщения: " + e.getMessage());
-            }
-        });
+    @Override
+    public void onError(String error) {
+        isClientConnected = false;
+        updateConnectionStatus("🔴 Ошибка", false);
+        showError(error);
     }
 
     @FXML
@@ -180,22 +185,40 @@ public class MainMenuController {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/game.fxml"));
 
-            // Передаем клиент в GameController (может быть null для одиночной игры)
-            GameController gameController = new GameController(client);
-            loader.setControllerFactory(param -> gameController);
-
+            // Сначала грузим FXML и получение контроллера через loader.getController()
             Parent root = loader.load();
+
+            Object controller = loader.getController();
+            // Если в контроллере есть методы для установки client / initialState, пробуем их вызвать рефлексией.
+            if (controller != null) {
+                try {
+                    Method mClient = controller.getClass().getMethod("setClient", Client.class);
+                    mClient.invoke(controller, client);
+                } catch (NoSuchMethodException ignored) {
+                    // контроллер не предоставляет setClient — нормально, пропускаем
+                } catch (Exception ex) {
+                    System.err.println("[MAIN] Ошибка вызова setClient: " + ex.getMessage());
+                }
+
+                try {
+                    Method mState = controller.getClass().getMethod("setInitialGameState", GameState.class);
+                    mState.invoke(controller, lastGameState);
+                } catch (NoSuchMethodException ignored) {
+                    // контроллер не предоставляет setInitialGameState — нормально, пропускаем
+                } catch (Exception ex) {
+                    System.err.println("[MAIN] Ошибка вызова setInitialGameState: " + ex.getMessage());
+                }
+            }
 
             Stage gameStage = new Stage();
 
-            // Определяем заголовок в зависимости от режима
             String title = "Dungeon Mayhem - ";
             if (client != null && isClientConnected) {
                 title += "Сетевая битва!";
-                addChatMessage("🎮 Система", "Запуск сетевой игры...");
+                chatService.addChatMessage("🎮 Система", "Запуск сетевой игры...");
             } else {
                 title += "Одиночная игра";
-                addChatMessage("🎮 Система", "Запуск одиночной игры...");
+                chatService.addChatMessage("🎮 Система", "Запуск одиночной игры...");
             }
 
             gameStage.setTitle(title);
@@ -203,37 +226,44 @@ public class MainMenuController {
             gameStage.setMinWidth(800);
             gameStage.setMinHeight(600);
 
-            // Обработка закрытия окна игры
+            // Попытаемся получить контроллер снова для вызова cleanup при закрытии
+            Object ctrlForClose = loader.getController();
             gameStage.setOnCloseRequest(event -> {
                 System.out.println("Закрытие игрового окна");
-                if (gameController != null) {
-                    gameController.cleanup();
+                try {
+                    if (ctrlForClose != null) {
+                        Method cleanup = null;
+                        try {
+                            cleanup = ctrlForClose.getClass().getMethod("cleanup");
+                        } catch (NoSuchMethodException ignored) {}
+                        if (cleanup != null) cleanup.invoke(ctrlForClose);
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[MAIN] Ошибка при cleanup игрового контроллера: " + ex.getMessage());
                 }
-
-                // Не закрываем главное меню, чтобы можно было начать новую игру
-                // Возвращаемся в главное меню
+                // Показываем обратно главное меню
                 showMainMenu();
             });
 
-            // Показываем игровое окно
             gameStage.show();
 
-            // Не закрываем главное меню, а просто скрываем его
+            // Скрываем главное окно, но не закрываем
             Stage mainStage = (Stage) chatArea.getScene().getWindow();
             mainStage.hide();
 
+        } catch (IOException e) {
+            showError("Ошибка загрузки игрового окна: " + e.getMessage());
+            e.printStackTrace();
+            showMainMenu();
         } catch (Exception e) {
             showError("Ошибка запуска игры: " + e.getMessage());
             e.printStackTrace();
-
-            // Показываем главное меню обратно в случае ошибки
             showMainMenu();
         }
     }
 
     private void showMainMenu() {
         try {
-            // Показываем скрытое главное меню
             Stage mainStage = (Stage) chatArea.getScene().getWindow();
             mainStage.show();
             mainStage.toFront();
@@ -245,26 +275,25 @@ public class MainMenuController {
     @FXML
     private void sendMessage() {
         String message = messageField.getText().trim();
-        if (message.isEmpty()) {
-            return;
-        }
+        if (message.isEmpty()) return;
 
-        if (client != null && isClientConnected) {
-            // Сетевое сообщение
+        if (networkController != null && client != null && isClientConnected) {
+            networkController.sendChat(message);
+            chatService.addChatMessage("Вы", message);
+        } else if (client != null && isClientConnected) {
+            // В редком случае, если networkController не был инициализирован
             client.sendChatMessage(message);
-            addChatMessage("💬 Вы", message);
+            chatService.addChatMessage("Вы", message);
         } else {
-            // Локальное сообщение (для чата в главном меню)
-            addChatMessage("💬 Вы", message);
-
-            // Имитация ответа системы в одиночном режиме
+            // Локальный режим — только эмуляция помощи
+            chatService.addChatMessage("Вы", message);
             if (message.toLowerCase().contains("привет")) {
-                addChatMessage("🤖 Система", "Привет! Создайте сервер или подключитесь к существующему для сетевой игры.");
+                chatService.addChatMessage("🤖 Система", "Привет! Создайте сервер или подключитесь к существующему для сетевой игры.");
             } else if (message.toLowerCase().contains("помощь") || message.contains("?")) {
-                addChatMessage("🤖 Система", "Доступные команды:");
-                addChatMessage("🤖 Система", "- Создать сервер: запускает игру для 2 игроков");
-                addChatMessage("🤖 Система", "- Подключиться: подключение к серверу по IP");
-                addChatMessage("🤖 Система", "- Начать игру: запуск одиночной или сетевой игры");
+                chatService.addChatMessage("🤖 Система", "Доступные команды:");
+                chatService.addChatMessage("🤖 Система", "- Создать сервер: запускает игру для 2 игроков");
+                chatService.addChatMessage("🤖 Система", "- Подключиться: подключение к серверу по IP");
+                chatService.addChatMessage("🤖 Система", "- Начать игру: запуск одиночной или сетевой игры");
             }
         }
 
@@ -283,32 +312,11 @@ public class MainMenuController {
         });
     }
 
-    public void addChatMessage(String sender, String message) {
-        String time = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
-        String formattedMessage = String.format("[%s] %s: %s\n", time, sender, message);
-
-        Platform.runLater(() -> {
-            chatArea.appendText(formattedMessage);
-            // Авто-скролл к последнему сообщению
-            chatArea.setScrollTop(Double.MAX_VALUE);
-        });
-    }
-
-    private void showError(String message) {
-        Platform.runLater(() -> {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle("Ошибка");
-            alert.setHeaderText("Произошла ошибка");
-            alert.setContentText(message);
-            alert.showAndWait();
-        });
-    }
-
     @FXML
     private void clearChat() {
         Platform.runLater(() -> {
             chatArea.clear();
-            addChatMessage("🧹 Система", "Чат очищен");
+            chatService.addChatMessage("🧹 Система", "Чат очищен");
         });
     }
 
@@ -366,6 +374,11 @@ public class MainMenuController {
     public void cleanup() {
         System.out.println("🧹 Очистка ресурсов MainMenuController");
 
+        if (networkController != null) {
+            networkController.shutdown();
+            networkController = null;
+        }
+
         if (client != null) {
             client.stop();
             client = null;
@@ -377,9 +390,10 @@ public class MainMenuController {
 
         isServerCreated = false;
         isClientConnected = false;
+
+        updateConnectionStatus("Одиночный режим", false);
     }
 
-    // Метод вызывается при закрытии приложения
     @FXML
     private void exitApplication() {
         cleanup();
@@ -397,5 +411,16 @@ public class MainMenuController {
         } else {
             return "Одиночный режим";
         }
+    }
+
+    // --- Новый метод showError (ранее отсутствовал) ---
+    private void showError(String message) {
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Ошибка");
+            alert.setHeaderText("Произошла ошибка");
+            alert.setContentText(message);
+            alert.showAndWait();
+        });
     }
 }

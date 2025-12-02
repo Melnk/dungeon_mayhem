@@ -39,6 +39,7 @@ public class Server implements Runnable {
         try {
             while (running) {
                 Socket clientSocket = serverSocket.accept();
+                System.out.println("🔌 Новый сокет: " + clientSocket + " | Текущее число клиентов: " + clients.size());
                 System.out.println("🔗 Новое подключение: " + clientSocket.getInetAddress());
 
                 if (clients.size() < 2) {
@@ -71,6 +72,7 @@ public class Server implements Runnable {
     }
 
     private void startGame() {
+        System.out.println("▶ startGame(): clients.size()=" + clients.size());
         // Инициализируем игровую сессию
         gameSession.initializeGame();
 
@@ -101,6 +103,7 @@ public class Server implements Runnable {
         // Уведомляем всех о начале игры
         broadcast(new NetworkMessage(MessageType.CHAT_MESSAGE,
             "⚔ БИТВА НАЧАЛАСЬ! ⚔"), null);
+        System.out.println("▶ Отправлены GAME_UPDATE всем клиентам");
     }
 
     private List<Card> generateInitialHand() {
@@ -350,7 +353,10 @@ public class Server implements Runnable {
         public void run() {
             try {
                 out = new ObjectOutputStream(socket.getOutputStream());
+                out.flush(); // <- важно
                 in = new ObjectInputStream(socket.getInputStream());
+
+                System.out.println("🔗 ClientHandler[" + playerId + "]: streams initialized for " + socket.getInetAddress());
 
                 // Отправляем приветственное сообщение
                 sendMessage(new NetworkMessage(MessageType.CHAT_MESSAGE,
@@ -398,10 +404,12 @@ public class Server implements Runnable {
 
         public synchronized void sendMessage(NetworkMessage message) {
             if (!connected || out == null) return;
-
             try {
                 out.writeObject(message);
                 out.flush();
+                out.reset();
+                System.out.println("📤 Server -> player" + playerId + ": " + message.getType() + " (" +
+                    (message.getData() != null ? message.getData().toString() : "null") + ")");
             } catch (IOException e) {
                 System.err.println("❌ Ошибка отправки сообщения игроку " + playerId + ": " + e.getMessage());
                 disconnect();
