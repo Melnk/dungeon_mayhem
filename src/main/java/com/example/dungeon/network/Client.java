@@ -10,7 +10,7 @@ import com.example.dungeon.ui.MainMenuController;
 public class Client implements Runnable {
     private String host;
     private int port;
-    private Consumer<Object> messageHandler;
+    public Consumer<Object> messageHandler;
     private boolean connected;
     private Socket socket;
     private ObjectOutputStream out;

@@ -131,9 +131,10 @@ public class MainMenuController {
     private void startGame() {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/game.fxml"));
-            GameController gameController = new GameController(client);
-            loader.setController(gameController);
 
+            // Создаем контроллер с передачей клиента
+            GameController gameController = new GameController(client);
+            loader.setControllerFactory(param -> new GameController(client));
             Parent root = loader.load();
 
             Stage gameStage = new Stage();
@@ -141,7 +142,8 @@ public class MainMenuController {
             gameStage.setScene(new Scene(root, 1000, 700));
             gameStage.setOnCloseRequest(event -> {
                 if (client != null) {
-                    client.stop();
+                    // Временно комментируем, чтобы не закрывать соединение
+                    // client.stop();
                 }
             });
             gameStage.show();
@@ -152,6 +154,7 @@ public class MainMenuController {
 
         } catch (IOException e) {
             showError("Ошибка запуска игры: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
