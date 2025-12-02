@@ -1,5 +1,12 @@
 package com.example.dungeon.ui;
 
+import javafx.scene.paint.LinearGradient;
+import javafx.scene.paint.Stop;
+import javafx.scene.paint.CycleMethod;
+import javafx.scene.shape.Rectangle;
+import javafx.animation.TranslateTransition;
+import javafx.animation.ScaleTransition;
+import javafx.animation.ParallelTransition;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -44,9 +51,12 @@ public class GameController {
     // Игровые переменные
     private Client client;
     private GameState currentGameState;
-    private boolean isMyTurn = true; // Начинаем с нашего хода для теста
+    private boolean isMyTurn = true;
     private String playerName = "Вы";
     private String opponentName = "Противник";
+    private int playerId = 0;
+    private boolean isNetworkGame = false;
+    private boolean waitingForServer = false;
 
     // Карты в руке
     private List<Card> playerHand = new ArrayList<>();
@@ -61,17 +71,21 @@ public class GameController {
     // Сохраненный обработчик сообщений из MainMenu
     private Consumer<Object> originalMessageHandler;
 
+    // Таймеры
+    private Timeline opponentTurnTimer;
+
     public GameController(Client client) {
         this.client = client;
         if (client != null) {
-            // Сохраняем оригинальный обработчик
             this.originalMessageHandler = client.messageHandler;
+            this.isNetworkGame = true;
         }
     }
 
     @FXML
     public void initialize() {
         System.out.println("🎮 GameController инициализирован");
+        System.out.println("📡 Режим игры: " + (isNetworkGame ? "СЕТЕВОЙ" : "ОДИНОЧНЫЙ"));
 
         // Устанавливаем свой обработчик сообщений
         if (client != null && client.messageHandler != null) {
@@ -82,83 +96,109 @@ public class GameController {
         // Инициализируем интерфейс
         initializeUI();
 
-        // Добавляем тестовые карты для отладки
-        addTestCards();
-
-        // Отправляем сообщение о начале игры
-        addChatMessage("⚔ Система", "Битва началась! Добро пожаловать в подземелье!");
-        addChatMessage("⚔ Система", "Ваш ход! Выберите карту для атаки, защиты или лечения.");
-
-        // Обновляем статус
-        updateTurnIndicator();
-        updateHealthDisplay();
+        // Запускаем соответствующую игру
+        if (isNetworkGame && client != null && client.isConnected()) {
+            startNetworkGame();
+        } else {
+            startSinglePlayerGame();
+        }
     }
 
     private void initializeUI() {
-        // Очищаем контейнеры карт
         playerCardsContainer.getChildren().clear();
         opponentCardsContainer.getChildren().clear();
 
-        // Устанавливаем начальные значения
         updateHealthDisplay();
         gameStatusLabel.setText("🎯 ПОДГОТОВКА К БИТВЕ");
         turnIndicator.setText("Определяем очередность...");
 
-        // Настраиваем чат
         gameChatArea.setWrapText(true);
         gameChatArea.setEditable(false);
 
         // Создаем скрытые карты противника
         for (int i = 0; i < 5; i++) {
-            Pane hiddenCard = createHiddenCard();
+            Pane hiddenCard = createHiddenCard(i);
             opponentCardsContainer.getChildren().add(hiddenCard);
         }
     }
 
-    private void addTestCards() {
-        // Очищаем текущие карты
+    private void startSinglePlayerGame() {
+        System.out.println("🏁 Запуск одиночной игры");
+
+        addChatMessage("⚔ Система", "ОДИНОЧНАЯ ИГРА - Битва началась!");
+        addChatMessage("⚔ Система", "Ваш ход! Выберите карту для атаки, защиты или лечения.");
+
+        // Создаем начальные карты
+        createInitialCards();
+
+        // Обновляем статус
+        updateTurnIndicator();
+        updateHealthDisplay();
+
+        // Делаем карты активными
+        setCardsEnabled(true);
+    }
+
+    private void startNetworkGame() {
+        System.out.println("🏁 Запуск сетевой игры");
+
+        addChatMessage("🔗 Система", "СЕТЕВАЯ ИГРА - Ожидание сервера...");
+        addChatMessage("🔗 Система", "Подключено к серверу. Ожидайте начала игры.");
+
+        gameStatusLabel.setText("⏳ ОЖИДАНИЕ СЕРВЕРА");
+        turnIndicator.setText("Сервер определяет очередность ходов...");
+
+        waitingForServer = true;
+
+        // Делаем карты неактивными до получения состояния от сервера
+        setCardsEnabled(false);
+    }
+
+    private void createInitialCards() {
         playerHand.clear();
         cardPanes.clear();
         playerCardsContainer.getChildren().clear();
 
-        // Тестовые карты для отладки интерфейса
-        Card[] testCards = {
+        // Создаем предопределенный набор карт для баланса
+        Card[] initialCards = {
             new Card(CardType.ATTACK, "Огненный шар"),
             new Card(CardType.DEFENSE, "Железный щит"),
             new Card(CardType.HEAL, "Целебное зелье"),
             new Card(CardType.ATTACK, "Удар кинжалом"),
-            new Card(CardType.DEFENSE, "Магический барьер"),
-            new Card(CardType.HEAL, "Эликсир жизни"),
-            new Card(CardType.ATTACK, "Ледяная стрела"),
-            new Card(CardType.DEFENSE, "Каменная кожа")
+            new Card(CardType.DEFENSE, "Магический барьер")
         };
 
-        // Добавляем 5 случайных карт
-        Random random = new Random();
-        for (int i = 0; i < 5; i++) {
-            Card card = testCards[random.nextInt(testCards.length)];
+        for (int i = 0; i < initialCards.length; i++) {
+            Card card = initialCards[i];
             playerHand.add(card);
 
-            // Создаем визуальные элементы карт
-            Pane cardPane = createCardPane(card);
+            Pane cardPane = createCardPane(card, i);
             playerCardsContainer.getChildren().add(cardPane);
             cardPanes.add(cardPane);
         }
 
-        // Обновляем доступность карт
-        setCardsEnabled(isMyTurn);
+        updateCardVisualState();
     }
 
-    private Pane createCardPane(Card card) {
-        // Создаем панель для карты
+    private Pane createCardPane(Card card, int index) {
         Pane pane = new Pane();
         pane.setPrefSize(100, 150);
         pane.getStyleClass().add("card-pane");
+        pane.setId("card-" + index);
 
-        if (!isMyTurn) {
-            pane.getStyleClass().add("disabled");
-            pane.setDisable(true);
-        }
+        // Анимация при появлении
+        pane.setOpacity(0);
+        TranslateTransition slideIn = new TranslateTransition(Duration.millis(300), pane);
+        slideIn.setFromY(50);
+        slideIn.setToY(0);
+
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(300), pane);
+        fadeIn.setFromValue(0);
+        fadeIn.setToValue(1);
+
+        ParallelTransition parallelTransition = new ParallelTransition(slideIn, fadeIn);
+        parallelTransition.setDelay(Duration.millis(index * 100));
+        parallelTransition.play();
 
         // Определяем цвет карты по типу
         Color cardColor;
@@ -166,15 +206,15 @@ public class GameController {
 
         switch (card.getType()) {
             case ATTACK:
-                cardColor = Color.rgb(231, 76, 60); // Красный
+                cardColor = Color.rgb(231, 76, 60);
                 cardDescription = "Наносит 2 урона";
                 break;
             case DEFENSE:
-                cardColor = Color.rgb(52, 152, 219); // Синий
+                cardColor = Color.rgb(52, 152, 219);
                 cardDescription = "Даёт +1 щит";
                 break;
             case HEAL:
-                cardColor = Color.rgb(46, 204, 113); // Зеленый
+                cardColor = Color.rgb(46, 204, 113);
                 cardDescription = "Восстанавливает 1 HP";
                 break;
             default:
@@ -195,7 +235,7 @@ public class GameController {
         gc.fillRoundRect(2, 2, 96, 50, 15, 15);
 
         // Рисуем рамку
-        gc.setStroke(Color.WHITE);
+        gc.setStroke(isMyTurn ? Color.WHITE : Color.GRAY);
         gc.setLineWidth(2);
         gc.strokeRoundRect(2, 2, 96, 146, 15, 15);
 
@@ -216,9 +256,14 @@ public class GameController {
         gc.setFont(javafx.scene.text.Font.font("Arial", 11));
         gc.fillText(card.getName(), 50, 80);
 
-        // Рисуем тип карты и описание
+        // Рисуем тип карты
         gc.setFont(javafx.scene.text.Font.font("Arial", 9));
-        String typeText = card.getType().toString();
+        String typeText = "";
+        switch (card.getType()) {
+            case ATTACK: typeText = "АТАКА"; break;
+            case DEFENSE: typeText = "ЗАЩИТА"; break;
+            case HEAL: typeText = "ЛЕЧЕНИЕ"; break;
+        }
         gc.fillText(typeText, 50, 100);
 
         // Рисуем описание эффекта
@@ -229,9 +274,15 @@ public class GameController {
         gc.setFill(Color.YELLOW);
         gc.setFont(javafx.scene.text.Font.font("Arial", 10));
         switch (card.getType()) {
-            case ATTACK: gc.fillText("⚔ 2", 50, 135); break;
-            case DEFENSE: gc.fillText("🛡 1", 50, 135); break;
-            case HEAL: gc.fillText("❤ 1", 50, 135); break;
+            case ATTACK:
+                gc.fillText("⚔ 2", 50, 135);
+                break;
+            case DEFENSE:
+                gc.fillText("🛡 1", 50, 135);
+                break;
+            case HEAL:
+                gc.fillText("❤ 1", 50, 135);
+                break;
         }
 
         pane.getChildren().add(canvas);
@@ -259,27 +310,44 @@ public class GameController {
         return pane;
     }
 
-    private Pane createHiddenCard() {
-        // Создаем скрытую карту для противника
+    private Pane createHiddenCard(int index) {
         Pane pane = new Pane();
         pane.setPrefSize(100, 150);
+
+        // Анимация появления
+        pane.setOpacity(0);
+        TranslateTransition slideIn = new TranslateTransition(Duration.millis(300), pane);
+        slideIn.setFromY(-50);
+        slideIn.setToY(0);
+
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(300), pane);
+        fadeIn.setFromValue(0);
+        fadeIn.setToValue(0.7);
+
+        ParallelTransition parallelTransition = new ParallelTransition(slideIn, fadeIn);
+        parallelTransition.setDelay(Duration.millis(index * 100));
+        parallelTransition.play();
 
         Canvas canvas = new Canvas(100, 150);
         GraphicsContext gc = canvas.getGraphicsContext2D();
 
-        // Рисуем рубашку карты с градиентом
-        gc.setFill(Color.rgb(30, 30, 40));
+        LinearGradient gradient = new LinearGradient(0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+            new Stop(0, Color.rgb(30, 30, 40)),
+            new Stop(1, Color.rgb(50, 50, 70))
+        );
+
+        gc.setFill(gradient);
         gc.fillRoundRect(2, 2, 96, 146, 15, 15);
 
         // Добавляем узор
-        gc.setFill(Color.rgb(60, 60, 80));
+        gc.setFill(Color.rgb(60, 60, 80, 0.5));
         for (int i = 0; i < 3; i++) {
             double size = 40 - i * 10;
             gc.fillOval(50 - size/2, 75 - size/2, size, size);
         }
 
         // Рисуем украшения
-        gc.setStroke(Color.rgb(100, 100, 120));
+        gc.setStroke(Color.rgb(100, 100, 120, 0.7));
         gc.setLineWidth(1);
         gc.strokeLine(20, 30, 80, 120);
         gc.strokeLine(80, 30, 20, 120);
@@ -293,7 +361,13 @@ public class GameController {
 
         pane.getChildren().add(canvas);
         pane.getStyleClass().add("card-pane");
-        pane.setStyle("-fx-opacity: 0.7;");
+
+        // Добавляем подсчет карт
+        Label countLabel = new Label("?");
+        countLabel.setStyle("-fx-text-fill: white; -fx-font-size: 12; -fx-font-weight: bold;");
+        countLabel.setLayoutX(85);
+        countLabel.setLayoutY(5);
+        pane.getChildren().add(countLabel);
 
         return pane;
     }
@@ -306,29 +380,47 @@ public class GameController {
 
         System.out.println("🎴 Играем карту: " + card.getName());
 
+        // Удаляем карту из руки
+        boolean removed = playerHand.removeIf(c ->
+            c.getName().equals(card.getName()) && c.getType() == card.getType());
+
+        if (!removed) {
+            showMessage("Ошибка: карта не найдена в руке!");
+            return;
+        }
+
+        // Обновляем отображение карт
+        updateCardDisplay();
+
+        // Отправляем карту через сеть, если это сетевая игра
+        if (isNetworkGame && client != null && client.isConnected()) {
+            client.playCard(card);
+            addChatMessage("🎯 Вы", "сыграл карту: " + card.getName());
+        } else {
+            // Одиночная игра - применяем эффект сразу
+            applyCardEffect(card);
+            addChatMessage("🎯 Вы", getActionMessage(card));
+        }
+
         // Показываем анимацию
         showCardAnimation(card);
-
-        // Применяем эффект карты
-        applyCardEffect(card);
 
         // Блокируем карты
         setCardsEnabled(false);
         lastActionLabel.setText("Вы сыграли: " + card.getName());
 
-        // Добавляем сообщение в чат
-        String actionMessage = getActionMessage(card);
-        addChatMessage("🎯 Вы", actionMessage);
-
-        // Имитация хода противника
-        simulateOpponentTurn();
+        // В одиночной игре запускаем ход противника
+        if (!isNetworkGame) {
+            startOpponentTurn();
+        }
     }
 
     private void applyCardEffect(Card card) {
+        int damage = 0;
+
         switch (card.getType()) {
             case ATTACK:
-                // Наносим урон противнику
-                int damage = 2;
+                damage = 2;
                 if (opponentShield > 0) {
                     opponentShield -= damage;
                     if (opponentShield < 0) {
@@ -341,12 +433,10 @@ public class GameController {
                 break;
 
             case DEFENSE:
-                // Добавляем щит
-                playerShield += 1;
+                playerShield = Math.min(10, playerShield + 1);
                 break;
 
             case HEAL:
-                // Лечим себя
                 playerHP = Math.min(10, playerHP + 1);
                 break;
         }
@@ -371,35 +461,28 @@ public class GameController {
         }
     }
 
-    private void simulateOpponentTurn() {
-        // Через 2 секунды - ход противника
+    private void startOpponentTurn() {
+        isMyTurn = false;
+        updateTurnIndicator();
+
+        addChatMessage("⏳ Система", "Ход противника...");
+
+        // Ждем 2 секунды, затем противник делает ход
         PauseTransition pause = new PauseTransition(Duration.seconds(2));
         pause.setOnFinished(e -> {
-            isMyTurn = false;
-            updateTurnIndicator();
-
-            // Противник делает ход
             opponentMakesMove();
 
-            // Через 2 секунды - снова наш ход
-            PauseTransition opponentPause = new PauseTransition(Duration.seconds(2));
-            opponentPause.setOnFinished(e2 -> {
-                isMyTurn = true;
-                updateTurnIndicator();
-                setCardsEnabled(true);
-
-                // Обновляем карты (имитация получения новой карты)
-                addTestCards();
-
-                addChatMessage("⚔ Система", "Ваш ход! Вы получили новую карту.");
+            // Через 2 секунды возвращаем ход
+            PauseTransition returnPause = new PauseTransition(Duration.seconds(2));
+            returnPause.setOnFinished(e2 -> {
+                endOpponentTurn();
             });
-            opponentPause.play();
+            returnPause.play();
         });
         pause.play();
     }
 
     private void opponentMakesMove() {
-        // Противник случайно выбирает действие
         Random random = new Random();
         int action = random.nextInt(3);
 
@@ -414,8 +497,10 @@ public class GameController {
                     if (playerShield < 0) {
                         playerHP += playerShield;
                         playerShield = 0;
+                        chatMessage = "Противник атакует! Пробит щит и нанесен урон.";
+                    } else {
+                        chatMessage = "Противник атакует! Ваш щит поглощает урон.";
                     }
-                    chatMessage = "Противник атакует! Ваш щит поглощает урон.";
                 } else {
                     playerHP = Math.max(0, playerHP - damage);
                     chatMessage = "Противник атакует! Вы получаете 2 урона.";
@@ -425,7 +510,7 @@ public class GameController {
                 break;
 
             case 1: // Защита
-                opponentShield += 1;
+                opponentShield = Math.min(10, opponentShield + 1);
                 chatMessage = "Противник усиливает защиту (+1 щит).";
                 opponentAction = "защищается";
                 showOpponentCardAnimation(new Card(CardType.DEFENSE, "Теневой щит"));
@@ -448,6 +533,41 @@ public class GameController {
         checkWinCondition();
     }
 
+    private void endOpponentTurn() {
+        isMyTurn = true;
+        updateTurnIndicator();
+
+        // Добавляем новую карту
+        addRandomCardToHand();
+
+        // Разблокируем карты
+        setCardsEnabled(true);
+
+        addChatMessage("⚔ Система", "Ваш ход! Вы получили новую карту.");
+    }
+
+    private void addRandomCardToHand() {
+        if (playerHand.size() >= 5) return; // Максимум 5 карт в руке
+
+        Card[] possibleCards = {
+            new Card(CardType.ATTACK, "Огненный шар"),
+            new Card(CardType.DEFENSE, "Железный щит"),
+            new Card(CardType.HEAL, "Целебное зелье"),
+            new Card(CardType.ATTACK, "Удар кинжалом"),
+            new Card(CardType.DEFENSE, "Магический барьер"),
+            new Card(CardType.HEAL, "Эликсир жизни"),
+            new Card(CardType.ATTACK, "Ледяная стрела"),
+            new Card(CardType.DEFENSE, "Каменная кожа")
+        };
+
+        Random random = new Random();
+        Card newCard = possibleCards[random.nextInt(possibleCards.length)];
+        playerHand.add(newCard);
+
+        // Обновляем отображение карт
+        updateCardDisplay();
+    }
+
     private void showCardAnimation(Card card) {
         GraphicsContext gc = battleAnimationCanvas.getGraphicsContext2D();
         battleAnimationCanvas.setVisible(true);
@@ -456,7 +576,6 @@ public class GameController {
         // Очищаем canvas
         gc.clearRect(0, 0, battleAnimationCanvas.getWidth(), battleAnimationCanvas.getHeight());
 
-        // Определяем цвет и текст анимации
         Color animationColor;
         String animationText = "";
         String effectText = "";
@@ -509,13 +628,11 @@ public class GameController {
     }
 
     private void updateHealthDisplay() {
-        // Обновляем метки
         playerHealthLabel.setText("❤ HP: " + playerHP);
         playerShieldLabel.setText("🛡 Щиты: " + playerShield);
         opponentHealthLabel.setText("❤ HP: " + opponentHP);
         opponentShieldLabel.setText("🛡 Щиты: " + opponentShield);
 
-        // Обновляем полоски здоровья
         updateHealthBars();
     }
 
@@ -526,14 +643,10 @@ public class GameController {
         double width = 150;
         double height = 20;
 
-        // Очищаем canvas
         playerGc.clearRect(0, 0, width, height);
         opponentGc.clearRect(0, 0, width, height);
 
-        // Рисуем полоски здоровья игрока
         drawHealthBar(playerGc, playerHP, playerShield, false);
-
-        // Рисуем полоски здоровья противника
         drawHealthBar(opponentGc, opponentHP, opponentShield, true);
     }
 
@@ -541,22 +654,21 @@ public class GameController {
         double width = 150;
         double height = 20;
 
-        // Рисуем фон (максимальное здоровье)
+        // Рисуем фон
         gc.setFill(Color.rgb(50, 50, 50));
         gc.fillRect(0, 0, width, height);
 
         // Рисуем текущее здоровье
         double healthWidth = (health / 10.0) * width;
-        gc.setFill(Color.rgb(46, 204, 113)); // Зеленый
+        gc.setFill(Color.rgb(46, 204, 113));
         gc.fillRect(0, 0, healthWidth, height);
 
         // Рисуем щиты поверх здоровья
         if (shield > 0) {
             double shieldWidth = Math.min(shield, 10) / 10.0 * width;
-            gc.setFill(Color.rgb(52, 152, 219, 0.7)); // Синий с прозрачностью
+            gc.setFill(Color.rgb(52, 152, 219, 0.7));
             gc.fillRect(0, 0, shieldWidth, height);
 
-            // Рисуем текст щитов
             gc.setFill(Color.WHITE);
             gc.setFont(javafx.scene.text.Font.font("Arial", 10));
             if (isOpponent) {
@@ -586,6 +698,41 @@ public class GameController {
         }
     }
 
+    private void updateCardDisplay() {
+        playerCardsContainer.getChildren().clear();
+        cardPanes.clear();
+
+        if (playerHand.isEmpty()) {
+            Label noCardsLabel = new Label("Нет карт в руке");
+            noCardsLabel.setStyle("-fx-text-fill: #888; -fx-font-size: 14;");
+            playerCardsContainer.getChildren().add(noCardsLabel);
+            return;
+        }
+
+        for (int i = 0; i < playerHand.size(); i++) {
+            Card card = playerHand.get(i);
+            Pane cardPane = createCardPane(card, i);
+            playerCardsContainer.getChildren().add(cardPane);
+            cardPanes.add(cardPane);
+        }
+
+        updateCardVisualState();
+    }
+
+    private void updateCardVisualState() {
+        for (Pane cardPane : cardPanes) {
+            if (isMyTurn) {
+                cardPane.getStyleClass().remove("disabled");
+                cardPane.setDisable(false);
+            } else {
+                if (!cardPane.getStyleClass().contains("disabled")) {
+                    cardPane.getStyleClass().add("disabled");
+                }
+                cardPane.setDisable(true);
+            }
+        }
+    }
+
     private void updateTurnIndicator() {
         if (isMyTurn) {
             gameStatusLabel.setText("🎯 ВАШ ХОД");
@@ -601,17 +748,8 @@ public class GameController {
     }
 
     private void setCardsEnabled(boolean enabled) {
-        for (Pane cardPane : cardPanes) {
-            if (enabled) {
-                cardPane.getStyleClass().remove("disabled");
-                cardPane.setDisable(false);
-            } else {
-                if (!cardPane.getStyleClass().contains("disabled")) {
-                    cardPane.getStyleClass().add("disabled");
-                }
-                cardPane.setDisable(true);
-            }
-        }
+        this.isMyTurn = enabled;
+        updateCardVisualState();
     }
 
     private void checkWinCondition() {
@@ -654,21 +792,13 @@ public class GameController {
     private void sendGameChatMessage() {
         String message = gameMessageField.getText().trim();
         if (!message.isEmpty()) {
-            if (client != null && client.isConnected()) {
+            if (isNetworkGame && client != null && client.isConnected()) {
                 client.sendChatMessage(message);
                 addChatMessage("💬 Вы", message);
                 gameMessageField.clear();
             } else {
-                // Локальный чат для теста
                 addChatMessage("💬 Вы", message);
                 gameMessageField.clear();
-
-                // Имитация ответа противника
-                if (message.toLowerCase().contains("привет")) {
-                    PauseTransition pause = new PauseTransition(Duration.seconds(1));
-                    pause.setOnFinished(e -> addChatMessage("💬 Противник", "Привет! Готов к битве?"));
-                    pause.play();
-                }
             }
         }
     }
@@ -756,7 +886,6 @@ public class GameController {
 
         } catch (Exception e) {
             e.printStackTrace();
-            // Если ошибка, просто закрываем окно
             Stage stage = (Stage) gameChatArea.getScene().getWindow();
             stage.close();
         }
@@ -777,7 +906,6 @@ public class GameController {
             lastActionLabel.setText(message);
             lastActionLabel.setStyle("-fx-text-fill: #FF9800;");
 
-            // Через 3 секунды очищаем
             PauseTransition pause = new PauseTransition(Duration.seconds(3));
             pause.setOnFinished(e -> lastActionLabel.setText(""));
             pause.play();
@@ -820,15 +948,11 @@ public class GameController {
     private void handleNetworkMessageType(NetworkMessage message) {
         try {
             switch (message.getType()) {
-                case GAME_UPDATE:
-                    GameState gameState = (GameState) message.getData();
-                    System.out.println("[GAME] Обновление состояния игры");
-                    // Здесь будет обновление от сервера
-                    break;
-
                 case CHAT_MESSAGE:
                     String chatMsg = (String) message.getData();
-                    addChatMessage("💬 Игрок", chatMsg);
+                    if (!chatMsg.startsWith("Вы:")) {
+                        addChatMessage("💬 Игрок", chatMsg);
+                    }
                     break;
 
                 case CARD_PLAYED:
@@ -842,16 +966,103 @@ public class GameController {
                     String joinMsg = (String) message.getData();
                     addChatMessage("👥 Система", joinMsg);
                     break;
+
+                case GAME_UPDATE:
+                    GameState gameState = (GameState) message.getData();
+                    System.out.println("[SERVER] Получено обновление игры");
+
+                    Platform.runLater(() -> {
+                        waitingForServer = false;
+
+                        // Определяем, кто мы - игрок 1 или игрок 2
+                        String currentPlayerName = gameState.getCurrentPlayer().getName();
+                        if (currentPlayerName.contains("1") && playerId == 0) {
+                            playerId = 1;
+                            addChatMessage("⚔ Система", "Вы - Игрок 1");
+                        } else if (currentPlayerName.contains("2") && playerId == 0) {
+                            playerId = 2;
+                            addChatMessage("⚔ Система", "Вы - Игрок 2");
+                        }
+
+                        // Определяем, наш ли это ход
+                        boolean isOurTurn = (playerId == 1 && gameState.isPlayerTurn()) ||
+                            (playerId == 2 && !gameState.isPlayerTurn());
+
+                        // Обновляем состояние игры
+                        updateGameFromServer(gameState, isOurTurn);
+                    });
+                    break;
             }
         } catch (Exception e) {
             System.err.println("[GAME] Ошибка обработки сетевого сообщения: " + e.getMessage());
         }
     }
 
+    private void updateGameFromServer(GameState gameState, boolean isOurTurn) {
+        this.currentGameState = gameState;
+        this.isMyTurn = isOurTurn;
+
+        System.out.println("[DEBUG] playerId: " + playerId + ", isOurTurn: " + isOurTurn);
+
+        Player myPlayer, opponent;
+        if (playerId == 1) {
+            myPlayer = gameState.getCurrentPlayer();
+            opponent = gameState.getOpponentPlayer();
+        } else if (playerId == 2) {
+            myPlayer = gameState.getOpponentPlayer();
+            opponent = gameState.getCurrentPlayer();
+        } else {
+            myPlayer = gameState.getCurrentPlayer();
+            opponent = gameState.getOpponentPlayer();
+        }
+
+        // Обновляем здоровье
+        playerHP = myPlayer.getHealth();
+        playerShield = myPlayer.getShield();
+        opponentHP = opponent.getHealth();
+        opponentShield = opponent.getShield();
+
+        updateHealthDisplay();
+
+        // Обновляем карты в руке
+        if (myPlayer.getHand() != null) {
+            updatePlayerHandFromServer(myPlayer.getHand());
+        }
+
+        updateTurnIndicator();
+        setCardsEnabled(isMyTurn);
+
+        if (gameState.getGameStatus() != null) {
+            gameStatusLabel.setText(gameState.getGameStatus());
+        }
+
+        if (opponent.getHand() != null) {
+            updateOpponentCards(opponent.getHand().size());
+        }
+    }
+
+    private void updatePlayerHandFromServer(List<Card> hand) {
+        playerHand.clear();
+        playerHand.addAll(hand);
+        updateCardDisplay();
+    }
+
+    private void updateOpponentCards(int cardCount) {
+        opponentCardsContainer.getChildren().clear();
+
+        for (int i = 0; i < cardCount; i++) {
+            Pane hiddenCard = createHiddenCard(i);
+            opponentCardsContainer.getChildren().add(hiddenCard);
+        }
+    }
+
     public void cleanup() {
-        // Восстанавливаем оригинальный обработчик сообщений
         if (client != null && originalMessageHandler != null) {
             client.messageHandler = originalMessageHandler;
+        }
+
+        if (opponentTurnTimer != null) {
+            opponentTurnTimer.stop();
         }
     }
 }

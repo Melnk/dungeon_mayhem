@@ -1,17 +1,18 @@
 package com.example.dungeon.network;
 
+import com.example.dungeon.game.Card;
+import com.example.dungeon.game.CardType;
 import java.io.*;
 import java.net.*;
+import java.util.Random;
 import java.util.concurrent.*;
-import java.util.function.*;
-import com.example.dungeon.game.Card;
-import com.example.dungeon.ui.MainMenuController;
+import java.util.function.Consumer;
 
 public class Client implements Runnable {
-    private String host;
-    private int port;
+    public String host;
+    public int port;
     public Consumer<Object> messageHandler;
-    private boolean connected;
+    public boolean connected;
     private Socket socket;
     private ObjectOutputStream out;
     private ObjectInputStream in;
@@ -29,16 +30,18 @@ public class Client implements Runnable {
     public void run() {
         try {
             socket = new Socket(host, port);
-            socket.setSoTimeout(5000); // Таймаут 5 секунд
+            socket.setSoTimeout(10000); // Таймаут 10 секунд
 
             out = new ObjectOutputStream(socket.getOutputStream());
             in = new ObjectInputStream(socket.getInputStream());
 
             connected = true;
-            System.out.println("Успешно подключено к " + host + ":" + port);
+            System.out.println("✅ Успешно подключено к " + host + ":" + port);
 
             // Уведомляем UI об успешном подключении
-            messageHandler.accept("CONNECTED:Успешное подключение");
+            if (messageHandler != null) {
+                messageHandler.accept("CONNECTED:Успешное подключение к серверу");
+            }
 
             // Основной цикл приема сообщений
             while (connected && !socket.isClosed()) {
@@ -49,40 +52,43 @@ public class Client implements Runnable {
                     // Таймаут - продолжаем слушать
                     continue;
                 } catch (EOFException | SocketException e) {
-                    System.out.println("Соединение разорвано");
+                    System.out.println("🔌 Соединение разорвано");
                     break;
                 }
             }
         } catch (ConnectException e) {
-            messageHandler.accept("ERROR:Не удалось подключиться к серверу");
-            System.err.println("Ошибка подключения: " + e.getMessage());
+            if (messageHandler != null) {
+                messageHandler.accept("ERROR:Не удалось подключиться к серверу. Убедитесь, что сервер запущен.");
+            }
+            System.err.println("❌ Ошибка подключения: " + e.getMessage());
         } catch (IOException | ClassNotFoundException e) {
-            messageHandler.accept("ERROR:Ошибка соединения: " + e.getMessage());
-            System.err.println("Ошибка клиента: " + e.getMessage());
+            if (messageHandler != null) {
+                messageHandler.accept("ERROR:Ошибка соединения: " + e.getMessage());
+            }
+            System.err.println("❌ Ошибка клиента: " + e.getMessage());
         } finally {
             disconnect();
         }
     }
 
     private void processMessage(NetworkMessage message) {
-        // Обрабатываем сообщение в отдельном потоке
-        messageProcessor.submit(() -> {
+        if (messageHandler != null) {
             messageHandler.accept(message);
-        });
+        }
     }
 
     public synchronized void sendMessage(NetworkMessage message) {
         if (!connected || out == null) {
-            System.err.println("Нельзя отправить сообщение: нет подключения");
+            System.err.println("❌ Нельзя отправить сообщение: нет подключения");
             return;
         }
 
         try {
             out.writeObject(message);
             out.flush();
-            System.out.println("Сообщение отправлено: " + message.getType());
+            System.out.println("📤 Сообщение отправлено: " + message.getType());
         } catch (IOException e) {
-            System.err.println("Ошибка отправки сообщения: " + e.getMessage());
+            System.err.println("❌ Ошибка отправки сообщения: " + e.getMessage());
             disconnect();
         }
     }
@@ -97,7 +103,9 @@ public class Client implements Runnable {
 
     private void disconnect() {
         connected = false;
-        messageProcessor.shutdown();
+        if (messageProcessor != null) {
+            messageProcessor.shutdown();
+        }
 
         try {
             if (in != null) in.close();
@@ -105,14 +113,16 @@ public class Client implements Runnable {
             if (socket != null && !socket.isClosed()) socket.close();
 
             // Уведомляем UI об отключении
-            messageHandler.accept("DISCONNECTED:Соединение разорвано");
+            if (messageHandler != null) {
+                messageHandler.accept("DISCONNECTED:Соединение с сервером разорвано");
+            }
         } catch (IOException e) {
-            System.err.println("Ошибка при отключении: " + e.getMessage());
+            System.err.println("❌ Ошибка при отключении: " + e.getMessage());
         }
     }
 
     public boolean isConnected() {
-        return connected;
+        return connected && socket != null && !socket.isClosed();
     }
 
     public void stop() {
