@@ -15,13 +15,16 @@ import javafx.util.Duration;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+/**
+ * GameController — исправленная версия:
+ *  - убран вызов несуществующего CardMapper
+ *  - клики по картам в сетевой игре разрешаются, если визуально карта доступна (исправлена логика)
+ *  - корректная синхронизация serverTurnKnown при приходе статусов / обновлений
+ */
 public class GameController implements GameEventListener, GameNetworkController.NetworkListener {
 
-    // FXML
     @FXML private Label playerHealthLabel;
     @FXML private Label playerShieldLabel;
     @FXML private Label opponentHealthLabel;
@@ -29,8 +32,6 @@ public class GameController implements GameEventListener, GameNetworkController.
     @FXML private Label gameStatusLabel;
     @FXML private Label turnIndicator;
     @FXML private Label lastActionLabel;
-
-    // таймер сверху — добавьте в FXML Label fx:id="gameTimerLabel"
     @FXML private Label gameTimerLabel;
 
     @FXML private Canvas playerHealthCanvas;
@@ -43,7 +44,6 @@ public class GameController implements GameEventListener, GameNetworkController.
     @FXML private TextArea gameChatArea;
     @FXML private TextField gameMessageField;
 
-    // collaborators
     private GameEngine engine;
     private CardViewFactory cardFactory;
     private HealthBarRenderer hbRenderer;
@@ -52,12 +52,12 @@ public class GameController implements GameEventListener, GameNetworkController.
     private GameNetworkController networkController;
     private Client client;
 
-    // state
     private boolean isMyTurn = true;
+    /** Для сетевой игры: null = сервер ещё не сообщил чей ход; true/false = известно */
+    private Boolean serverTurnKnown = null;
     private Timeline gameTimer;
     private Instant timerStart;
 
-    // initial state from MainMenu (через setter)
     @Setter
     private GameState initialGameState;
 
@@ -65,7 +65,6 @@ public class GameController implements GameEventListener, GameNetworkController.
 
     @FXML
     public void initialize() {
-        System.out.println("GameController initialize()");
         this.engine = new GameEngine();
         this.engine.setListener(this);
 
@@ -74,39 +73,32 @@ public class GameController implements GameEventListener, GameNetworkController.
         this.animationManager = new AnimationManager(battleAnimationCanvas);
         this.chatService = new ChatService(gameChatArea);
 
-        // Если initialGameState задан до initialize, применим
+        serverTurnKnown = null;
+
         if (initialGameState != null) {
             applyInitialGameState(initialGameState);
             initialGameState = null;
         }
 
-        // если нет сетевого клиента — старт одиночной игры
         if (client == null) {
             engine.startSinglePlayer();
-            // После старта оффлайна
-            if (client == null) {
-                engine.startSinglePlayer();
-                isMyTurn = engine.isPlayerTurn(); // явно синхронизируем флаг
-                // Перерисовать руку (engine уведомит via listener.onHandUpdated); но вызовем updateTurnVisuals на всякий
-                updateTurnVisuals();
-                startTimer();
-            }
             isMyTurn = engine.isPlayerTurn();
-            startTimer();
             updateTurnVisuals();
+            startTimer();
         } else {
             chatService.addChatMessage("Сеть", "Ожидание состояния от сервера...");
         }
     }
 
-    // сеттеры для MainMenu (через рефлексию)
     public void setClient(Client client) {
         this.client = client;
         if (client != null) {
             this.networkController = new GameNetworkController(client, this);
+            serverTurnKnown = null; // ждём GAME_UPDATE
         }
     }
 
+    // timer
     private void startTimer() {
         stopTimer();
         timerStart = Instant.now();
@@ -140,13 +132,13 @@ public class GameController implements GameEventListener, GameNetworkController.
     }
 
     @FXML public void showRules() {
-        // Используем ChatService/Alert аналогично ранее
-        String rules = "Правила..."; // укорочено, можно разместить полный текст как раньше
+        String rules = "Правила...";
         Alert a = new Alert(Alert.AlertType.INFORMATION);
         a.setTitle("Правила");
         a.setHeaderText("Dungeon Mayhem - Правила");
         TextArea ta = new TextArea(rules);
-        ta.setEditable(false); ta.setWrapText(true);
+        ta.setEditable(false);
+        ta.setWrapText(true);
         a.getDialogPane().setContent(ta);
         a.showAndWait();
     }
@@ -156,25 +148,26 @@ public class GameController implements GameEventListener, GameNetworkController.
         alert.setTitle("Сдаться");
         alert.setHeaderText("Вы уверены?");
         if (alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK) {
-            engine.playCard(new Card(CardType.HEAL, "surrender-placeholder"), false); // просто чтобы перейти в окончание
-            // Лучше: отправить событие на сервер; но для оффлайна покажем поражение:
-            onGameOver(false, 0, 0);
+            if (client == null) {
+                onGameOver(false, 0, 0);
+            } else {
+                if (networkController != null) networkController.sendChat("PLAYER_SURRENDER");
+                setPlayerCardsEnabled(false);
+            }
         }
     }
 
     @FXML public void returnToMenu() {
         cleanup();
-        // Закрываем окно
         Platform.runLater(() -> {
             try {
                 Stage st = (Stage) gameChatArea.getScene().getWindow();
                 st.close();
-                // главное меню откроется из MainMenuController в старом коде
-            } catch (Exception e) { /* ignore */ }
+            } catch (Exception ignored) {}
         });
     }
 
-    // GameEventListener impl
+    // GameEventListener
     @Override
     public void onHealthUpdated(int playerHP, int playerShield, int opponentHP, int opponentShield) {
         Platform.runLater(() -> {
@@ -191,31 +184,46 @@ public class GameController implements GameEventListener, GameNetworkController.
     public void onHandUpdated(List<Card> playerHand) {
         Platform.runLater(() -> {
             playerCardsContainer.getChildren().clear();
-            // Синхронизируем флаг хода с движком (если оффлайн)
-            if (engine != null) {
+
+            // определяем визуальную доступность
+            boolean enabledVisual;
+            if (client != null) {
+                enabledVisual = (serverTurnKnown == null) ? true : isMyTurn;
+            } else {
                 isMyTurn = engine.isPlayerTurn();
+                enabledVisual = isMyTurn;
             }
 
             for (int i = 0; i < playerHand.size(); i++) {
                 Card c = playerHand.get(i);
+                boolean finalEnabledVisual = enabledVisual;
 
-                boolean enabledVisual = isMyTurn; // показываем как доступные/тусклые
-                // при сетевой игре клики отправляем на сервер и НЕ выполняем локально engine.playCard
-                var pane = cardFactory.createCardPane(c, i, enabledVisual, card -> {
-                    // Защита: не даём нажимать вне хода
-                    if (!isMyTurn) {
+                var pane = cardFactory.createCardPane(c, i, finalEnabledVisual, card -> {
+                    // allow click if either:
+                    // - offline and engine says it's player's turn
+                    // - online and (server told whose turn OR we allow play when status unknown) AND isMyTurn
+                    boolean allowLocalPlay = (client == null && engine != null && engine.isPlayerTurn());
+                    boolean allowNetworkSend;
+                    if (client != null) {
+                        // если сервер ещё не сообщил чей ход — позволим отправить (чтобы не блокировать UX),
+                        // после отправки мы сразу поставим serverTurnKnown=null и заблокируем интерфейс.
+                        allowNetworkSend = isMyTurn;
+                    } else allowNetworkSend = false;
+
+                    if (!allowLocalPlay && !allowNetworkSend) {
                         chatService.addChatMessage("Система", "Сейчас не ваш ход!");
                         return;
                     }
 
-                    if (networkController != null) {
-                        // Сетевая игра: отправляем ход на сервер и сразу блокируем карты до обновления от сервера
-                        networkController.playCard(card);
-                        chatService.addChatMessage("Вы", card.getName());
-                        // Визуально блокируем карты сразу
-                        setPlayerCardsEnabled(false);
+                    if (client != null) {
+                        if (networkController != null) {
+                            networkController.playCard(card);
+                            chatService.addChatMessage("Вы", card.getName());
+                            // ожидаем ответ от сервера — пометим как неизвестный и заблокируем UI
+                            serverTurnKnown = null;
+                            setPlayerCardsEnabled(false);
+                        }
                     } else {
-                        // Оффлайн: применяем ход локально через engine
                         engine.playCard(card, false);
                         chatService.addChatMessage("Вы", card.getName());
                     }
@@ -224,18 +232,8 @@ public class GameController implements GameEventListener, GameNetworkController.
                 playerCardsContainer.getChildren().add(pane);
             }
 
-            // Применяем визуальный эффект (тусклость/доступность)
             updateTurnVisuals();
         });
-    }
-
-    private void setPlayerCardsEnabled(boolean enabled) {
-        this.isMyTurn = enabled;
-        for (var node : playerCardsContainer.getChildren()) {
-            node.setDisable(!enabled);
-            node.setOpacity(enabled ? 1.0 : 0.45);
-        }
-        turnIndicator.setText(enabled ? "Ваш ход" : "Ход противника");
     }
 
     @Override
@@ -252,9 +250,10 @@ public class GameController implements GameEventListener, GameNetworkController.
     public void onGameStatusUpdated(String status) {
         Platform.runLater(() -> {
             gameStatusLabel.setText(status);
-            // синхронизируем локально isMyTurn флаг (для оффлайн engine уже делает это)
-            if (status != null && status.contains("ВАШ")) isMyTurn = true;
-            else if (status != null && status.contains("ХОД ПРОТИВНИКА")) isMyTurn = false;
+            if (status != null && status.toUpperCase().contains("ВАШ")) isMyTurn = true;
+            else if (status != null && status.toUpperCase().contains("ХОД ПРОТИВНИКА")) isMyTurn = false;
+            // если статус пришёл — считаем, что сервер сообщил чей ход
+            serverTurnKnown = true;
             updateTurnVisuals();
         });
     }
@@ -287,23 +286,35 @@ public class GameController implements GameEventListener, GameNetworkController.
         });
     }
 
-    // NetworkListener impl (коротко)
+    // NetworkListener
     @Override public void onChatMessage(String sender, String message) { chatService.addChatMessage(sender, message); }
+
     @Override
     public void onGameUpdate(GameState state) {
         Platform.runLater(() -> {
             if (state == null) return;
             this.isMyTurn = state.isPlayerTurn();
-            applyInitialGameState(state); // или адаптер который у тебя есть
+            this.serverTurnKnown = true;
+            applyInitialGameState(state);
             updateTurnVisuals();
         });
     }
-    @Override public void onCardPlayed(com.example.dungeon.game.Card card) { onCardPlayed(card, true); }
-    @Override public void onConnected(String info) { chatService.addChatMessage("Сеть", info); }
-    @Override public void onDisconnected(String reason) { chatService.addChatMessage("Сеть","Отключено: "+reason); }
-    @Override public void onError(String error) { chatService.addChatMessage("Сеть","Ошибка: "+error); }
 
-    // Вспомогательные методы
+    @Override
+    public void onCardPlayed(com.example.dungeon.game.Card card) {
+        // получаем уже локальный тип Card из пакета com.example.dungeon.game — используем напрямую
+        onCardPlayed(card, true);
+    }
+
+    @Override public void onConnected(String info) { chatService.addChatMessage("Сеть", info); }
+    @Override public void onDisconnected(String reason) {
+        chatService.addChatMessage("Сеть", "Отключено: " + reason);
+        // безопасно блокируем карты, чтобы ничего не сломать
+        setPlayerCardsEnabled(false);
+    }
+    @Override public void onError(String error) { chatService.addChatMessage("Сеть", "Ошибка: " + error); }
+
+    // helpers
     private void applyInitialGameState(GameState state) {
         if (state == null) return;
         Player me = state.getCurrentPlayer();
@@ -313,18 +324,27 @@ public class GameController implements GameEventListener, GameNetworkController.
             onHandUpdated(me.getHand() == null ? List.of() : me.getHand());
             onOpponentHandCountUpdated(opp.getHand() == null ? 0 : opp.getHand().size());
             isMyTurn = state.isPlayerTurn();
+            serverTurnKnown = true;
             if (isMyTurn) onGameStatusUpdated("🎯 ВАШ ХОД"); else onGameStatusUpdated("⏳ ХОД ПРОТИВНИКА");
             startTimer();
+        } else {
+            chatService.addChatMessage("Система", "Получено неполное состояние от сервера.");
         }
     }
 
     private void updateTurnVisuals() {
-        boolean enabled = this.isMyTurn;
+        boolean enabled;
+        if (client != null) {
+            enabled = (serverTurnKnown == null) ? true : isMyTurn;
+        } else {
+            enabled = (engine != null && engine.isPlayerTurn());
+        }
+
         for (var node : playerCardsContainer.getChildren()) {
             node.setDisable(!enabled);
             node.setOpacity(enabled ? 1.0 : 0.45);
         }
-        // если нужно — обновляем индикатор и gameStatusLabel
+
         turnIndicator.setText(enabled ? "Ваш ход" : "Ход противника");
     }
 
@@ -333,9 +353,19 @@ public class GameController implements GameEventListener, GameNetworkController.
             node.setDisable(true);
             node.setOpacity(0.45);
         }
+        turnIndicator.setText("Игра окончена");
     }
 
-    // cleanup
+    private void setPlayerCardsEnabled(boolean enabled) {
+        this.isMyTurn = enabled;
+        if (client != null) serverTurnKnown = enabled ? true : null;
+        for (var node : playerCardsContainer.getChildren()) {
+            node.setDisable(!enabled);
+            node.setOpacity(enabled ? 1.0 : 0.45);
+        }
+        turnIndicator.setText(enabled ? "Ваш ход" : "Ход противника");
+    }
+
     public void cleanup() {
         stopTimer();
         if (networkController != null) {
