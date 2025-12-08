@@ -2,136 +2,229 @@ package com.example.dungeon.ui;
 
 import com.example.dungeon.game.Card;
 import com.example.dungeon.game.CardType;
-import javafx.animation.*;
-import javafx.scene.canvas.Canvas;
-import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Label;
-import javafx.scene.layout.Pane;
+import javafx.scene.effect.*;
+import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-import javafx.scene.text.TextAlignment;
-import javafx.util.Duration;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 
 import java.util.function.Consumer;
 
 public class CardViewFactory {
 
-    public Pane createCardPane(Card card, int index, boolean isEnabled, Consumer<Card> onPlay) {
-        Pane pane = new Pane();
-        pane.setPrefSize(100, 150);
-        pane.getStyleClass().add("card-pane");
-        pane.setId("card-" + index);
+    public StackPane createCardPane(Card card, int index, boolean enabled, Consumer<Card> clickHandler) {
+        StackPane cardPane = new StackPane();
+        cardPane.getStyleClass().add("card-pane");
 
-        Canvas canvas = new Canvas(100, 150);
-        GraphicsContext gc = canvas.getGraphicsContext2D();
+        // Основной прямоугольник карты
+        Rectangle cardBg = new Rectangle(100, 140);
+        cardBg.setArcWidth(15);
+        cardBg.setArcHeight(15);
 
-        Color cardColor;
-        String cardDescription = "";
+        // Градиент в зависимости от типа карты
+        String gradientColor = getColorForCard(card.getType());
+        cardBg.setStyle(String.format(
+            "-fx-fill: linear-gradient(from 0%% 0%% to 100%% 100%%, %s, #000000);",
+            gradientColor
+        ));
 
-        switch (card.getType()) {
-            case ATTACK -> { cardColor = Color.rgb(231, 76, 60); cardDescription = "Наносит 2 урона"; }
-            case DEFENSE -> { cardColor = Color.rgb(52, 152, 219); cardDescription = "Даёт +1 щит"; }
-            case HEAL -> { cardColor = Color.rgb(46, 204, 113); cardDescription = "Восстанавливает 1 HP"; }
-            default -> cardColor = Color.GRAY;
+        // Эффекты для карты
+        DropShadow shadow = new DropShadow();
+        shadow.setColor(Color.web(gradientColor.replace("0x", "#")));
+        shadow.setRadius(15);
+        shadow.setSpread(0.3);
+        shadow.setOffsetX(0);
+        shadow.setOffsetY(0);
+
+        InnerShadow innerShadow = new InnerShadow();
+        innerShadow.setColor(Color.BLACK);
+        innerShadow.setRadius(10);
+        innerShadow.setOffsetX(2);
+        innerShadow.setOffsetY(2);
+
+        // ИСПРАВЛЕНИЕ: Комбинируем эффекты через setInput
+        Blend blendEffect = new Blend();
+        blendEffect.setMode(BlendMode.MULTIPLY);
+        blendEffect.setTopInput(innerShadow);
+        blendEffect.setBottomInput(shadow);
+
+        // Для хранения текущего эффекта (будем менять его динамически)
+        Blend[] currentEffect = new Blend[1]; // Массив для хранения ссылки
+        currentEffect[0] = blendEffect;
+        cardBg.setEffect(currentEffect[0]);
+
+        // Текст на карте
+        Label nameLabel = new Label(card.getName());
+        nameLabel.getStyleClass().add("card-name");
+        nameLabel.setFont(Font.font("Arial Black", FontWeight.BLACK, 12));
+        nameLabel.setTranslateY(-45);
+
+        Label typeLabel = new Label(card.getType().getDisplayName());
+        typeLabel.getStyleClass().add("card-type");
+        typeLabel.setFont(Font.font("Arial", FontWeight.BOLD, 10));
+        typeLabel.setTranslateY(45);
+
+        Label valueLabel = new Label(String.valueOf(card.getValue()));
+        valueLabel.getStyleClass().add("card-value");
+        valueLabel.setFont(Font.font("Arial Black", FontWeight.BLACK, 20));
+
+        // Иконка типа карты
+        Label iconLabel = new Label(card.getType().getIcon());
+        iconLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
+        iconLabel.setTranslateY(-10);
+
+        // Добавляем все элементы на карту
+        cardPane.getChildren().addAll(cardBg, nameLabel, typeLabel, valueLabel, iconLabel);
+
+        // Добавляем эффект при наведении только если карта доступна
+        if (enabled) {
+            cardPane.setOnMouseEntered(e -> {
+                // Эффект свечения при наведении
+                Glow glow = new Glow();
+                glow.setLevel(0.3);
+
+                // Создаем новый Blend с эффектом свечения
+                Blend glowBlend = new Blend(BlendMode.MULTIPLY, glow, blendEffect);
+                cardBg.setEffect(glowBlend);
+
+                cardPane.setTranslateY(-10);
+                cardPane.setRotate((Math.random() * 6) - 3); // Случайный небольшой поворот
+
+                // Обновляем текущий эффект
+                currentEffect[0] = glowBlend;
+            });
+
+            cardPane.setOnMouseExited(e -> {
+                cardBg.setEffect(blendEffect);
+                cardPane.setTranslateY(0);
+                cardPane.setRotate(0);
+                currentEffect[0] = blendEffect;
+            });
+
+            cardPane.setOnMouseClicked(e -> {
+                // Анимация при клике
+                javafx.animation.ScaleTransition clickAnim = new javafx.animation.ScaleTransition(
+                    javafx.util.Duration.millis(150), cardPane);
+                clickAnim.setToX(0.9);
+                clickAnim.setToY(0.9);
+                clickAnim.setAutoReverse(true);
+                clickAnim.setCycleCount(2);
+                clickAnim.play();
+
+                clickHandler.accept(card);
+            });
+        } else {
+            // Для недоступных карт делаем менее яркими
+            ColorAdjust dull = new ColorAdjust();
+            dull.setBrightness(-0.3);
+            dull.setSaturation(-0.5);
+
+            // Создаем Blend с эффектом затемнения
+            Blend dullBlend = new Blend(BlendMode.MULTIPLY, dull, blendEffect);
+            cardBg.setEffect(dullBlend);
+            currentEffect[0] = dullBlend;
         }
 
-        gc.setFill(cardColor);
-        gc.fillRoundRect(2,2,96,146,15,15);
-        gc.setFill(Color.rgb(0,0,0,0.25));
-        gc.fillRoundRect(2,2,96,40,15,15);
+        // Анимация появления карты
+        cardPane.setTranslateY(50);
+        cardPane.setOpacity(0);
+        javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(
+            javafx.util.Duration.millis(300 + index * 50), cardPane);
+        fadeIn.setToValue(1);
+        fadeIn.play();
 
-        gc.setStroke(isEnabled ? Color.WHITE : Color.GRAY);
-        gc.setLineWidth(2);
-        gc.strokeRoundRect(2,2,96,146,15,15);
+        javafx.animation.TranslateTransition slideIn = new javafx.animation.TranslateTransition(
+            javafx.util.Duration.millis(300 + index * 50), cardPane);
+        slideIn.setToY(0);
+        slideIn.play();
 
-        gc.setFill(Color.WHITE);
-        gc.setTextAlign(TextAlignment.CENTER);
-        gc.setFont(javafx.scene.text.Font.font("Arial", 24));
+        // Добавляем небольшой начальный поворот для эффекта веера
+        double rotation = (index - cardPane.getChildren().size() / 2.0) * 3;
+        cardPane.setRotate(rotation);
+        javafx.animation.RotateTransition rotateIn = new javafx.animation.RotateTransition(
+            javafx.util.Duration.millis(400 + index * 50), cardPane);
+        rotateIn.setToAngle(0);
+        rotateIn.play();
 
-        String symbol = switch (card.getType()) {
-            case ATTACK -> "⚔";
-            case DEFENSE -> "🛡";
-            case HEAL -> "❤";
-            default -> "";
-        };
-        gc.fillText(symbol, 50, 40);
-
-        gc.setFont(javafx.scene.text.Font.font("Arial", 11));
-        gc.fillText(card.getName(), 50, 80);
-
-        gc.setFont(javafx.scene.text.Font.font("Arial", 9));
-        String typeText = switch (card.getType()) {
-            case ATTACK -> "АТАКА";
-            case DEFENSE -> "ЗАЩИТА";
-            case HEAL -> "ЛЕЧЕНИЕ";
-            default -> "";
-        };
-        gc.fillText(typeText, 50, 100);
-
-        gc.setFont(javafx.scene.text.Font.font("Arial", 8));
-        gc.fillText(cardDescription, 50, 115);
-
-        pane.getChildren().add(canvas);
-
-        pane.setDisable(!isEnabled);
-        pane.setOpacity(isEnabled ? 1.0 : 0.45);
-
-        pane.setOnMouseClicked(e -> {
-            if (!pane.isDisabled() && onPlay != null) onPlay.accept(card);
-        });
-
-        pane.setOnMouseEntered(e -> {
-            if (!pane.isDisabled()) pane.setStyle("-fx-effect: dropshadow(gaussian, rgba(243,156,18,0.7), 20, 0, 0, 5); -fx-translate-y: -5;");
-        });
-        pane.setOnMouseExited(e -> pane.setStyle("-fx-translate-y: 0;"));
-
-        // entrance animation
-        pane.setOpacity(0);
-        TranslateTransition tt = new TranslateTransition(Duration.millis(240), pane);
-        tt.setFromY(20); tt.setToY(0);
-        FadeTransition ft = new FadeTransition(Duration.millis(240), pane);
-        ft.setFromValue(0); ft.setToValue(isEnabled ? 1.0 : 0.45);
-        ParallelTransition pt = new ParallelTransition(tt, ft);
-        pt.setDelay(Duration.millis(index * 60));
-        pt.play();
-
-        return pane;
+        return cardPane;
     }
 
-    /**
-     * Вид карты противника — серый фон, вопросительный знак.
-     */
-    public Pane createHiddenCard(int index) {
-        Pane pane = new Pane();
-        pane.setPrefSize(100,150);
-        pane.getStyleClass().add("card-pane-hidden");
+    private String getColorForCard(CardType type) {
+        switch (type) {
+            case ATTACK:
+            case DOUBLE_ATTACK:
+            case BERSERK_RAGE:
+            case FIREBALL:
+                return "#FF0000"; // Красный для атаки
+            case DEFEND:
+            case SUPER_SHIELD:
+                return "#0000FF"; // Синий для защиты
+            case HEAL:
+            case ULTIMATE_HEAL:
+            case HOLY_LIGHT:
+                return "#00FF00"; // Зеленый для лечения
+            default:
+                return "#FF8800"; // Оранжевый для остальных
+        }
+    }
 
-        Canvas canvas = new Canvas(100,150);
-        javafx.scene.canvas.GraphicsContext gc = canvas.getGraphicsContext2D();
+    public StackPane createHiddenCard(int index) {
+        StackPane hiddenCard = new StackPane();
 
-        gc.setFill(Color.rgb(40,40,50));
-        gc.fillRoundRect(2,2,96,146,15,15);
+        Rectangle cardBg = new Rectangle(100, 140);
+        cardBg.setArcWidth(15);
+        cardBg.setArcHeight(15);
+        cardBg.setStyle("-fx-fill: linear-gradient(from 0% 0% to 100% 100%, #660000, #000000);");
+        cardBg.setStroke(Color.web("#880000"));
+        cardBg.setStrokeWidth(3);
 
-        gc.setFill(Color.rgb(70,70,80));
-        gc.fillRoundRect(2,2,96,40,15,15);
+        // Эффект для скрытой карты
+        DropShadow shadow = new DropShadow();
+        shadow.setColor(Color.web("#660000"));
+        shadow.setRadius(10);
+        shadow.setOffsetX(3);
+        shadow.setOffsetY(3);
 
-        gc.setFill(Color.rgb(90,90,100));
-        gc.setFont(javafx.scene.text.Font.font("Arial",48));
-        gc.setTextAlign(TextAlignment.CENTER);
-        gc.fillText("?", 50, 95);
+        InnerShadow innerGlow = new InnerShadow();
+        innerGlow.setColor(Color.web("#FF0000"));
+        innerGlow.setRadius(15);
+        innerGlow.setOffsetX(0);
+        innerGlow.setOffsetY(0);
 
-        pane.getChildren().add(canvas);
-        pane.setOpacity(0.8);
+        // Создаем Blend эффект для скрытой карты
+        Blend hiddenBlend = new Blend(BlendMode.MULTIPLY, innerGlow, shadow);
+        cardBg.setEffect(hiddenBlend);
 
-        // simple entrance
-        pane.setOpacity(0);
-        TranslateTransition tt = new TranslateTransition(Duration.millis(250), pane);
-        tt.setFromY(-30); tt.setToY(0);
-        FadeTransition ft = new FadeTransition(Duration.millis(250), pane);
-        ft.setFromValue(0); ft.setToValue(0.85);
-        ParallelTransition pt = new ParallelTransition(tt, ft);
-        pt.setDelay(Duration.millis(index * 60));
-        pt.play();
+        // Знак вопроса на скрытой карте
+        Label questionMark = new Label("?");
+        questionMark.setFont(Font.font("Arial Black", FontWeight.BLACK, 48));
+        questionMark.setTextFill(Color.web("#FF0000"));
 
-        return pane;
+        // Эффект для знака вопроса
+        DropShadow textShadow = new DropShadow();
+        textShadow.setColor(Color.BLACK);
+        textShadow.setRadius(8);
+        textShadow.setOffsetX(3);
+        textShadow.setOffsetY(3);
+        questionMark.setEffect(textShadow);
+
+        hiddenCard.getChildren().addAll(cardBg, questionMark);
+        hiddenCard.setOpacity(0.9);
+
+        // Анимация для скрытой карты (пульсация)
+        hiddenCard.setRotate((index * 7) - 10); // Немного поворачиваем для эффекта
+
+        // Эффект пульсации для скрытых карт
+        javafx.animation.FadeTransition pulse = new javafx.animation.FadeTransition(
+            javafx.util.Duration.millis(1500 + index * 200), hiddenCard);
+        pulse.setFromValue(0.7);
+        pulse.setToValue(1.0);
+        pulse.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        pulse.setAutoReverse(true);
+        pulse.play();
+
+        return hiddenCard;
     }
 }

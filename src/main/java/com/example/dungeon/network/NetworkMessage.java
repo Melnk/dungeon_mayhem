@@ -16,3 +16,4 @@ public class NetworkMessage implements Serializable {
     public void setType(MessageType type) { this.type = type; }
     public void setData(Object data) { this.data = data; }
 }
+

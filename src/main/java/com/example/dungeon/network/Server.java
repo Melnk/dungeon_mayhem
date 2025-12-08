@@ -1,16 +1,25 @@
 package com.example.dungeon.network;
 
+import com.example.dungeon.game.*;
+import lombok.Getter;
+import lombok.Setter;
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import com.example.dungeon.game.*;
 
+/**
+ * Server — улучшенная версия.
+ *  - clients: synchronized list
+ *  - клиент сообщает серверу о готовности streams -> сервер ждёт готовых клиентов перед startGame()
+ *  - generateInitialHand безопасен и не вызывает OOB
+ */
 public class Server implements Runnable {
     private int port;
-    private boolean running;
+    private volatile boolean running;
     private ServerSocket serverSocket;
     private List<ClientHandler> clients;
+    private Set<ClientHandler> readyHandlers;
     private GameSession gameSession;
     private ExecutorService pool;
 
@@ -21,7 +30,9 @@ public class Server implements Runnable {
         this.port = port;
         this.running = true;
         this.serverSocket = new ServerSocket(port);
-        this.clients = new ArrayList<>();
+        // синхронный список — безопаснее при многопоточном доступе
+        this.clients = Collections.synchronizedList(new ArrayList<>());
+        this.readyHandlers = ConcurrentHashMap.newKeySet();
         this.pool = Executors.newCachedThreadPool();
         this.gameSession = new GameSession();
 
@@ -39,29 +50,20 @@ public class Server implements Runnable {
         try {
             while (running) {
                 Socket clientSocket = serverSocket.accept();
-                System.out.println("🔌 Новый сокет: " + clientSocket + " | Текущее число клиентов: " + clients.size());
-                System.out.println("🔗 Новое подключение: " + clientSocket.getInetAddress());
+                System.out.println("🔌 Новое подключение: " + clientSocket.getInetAddress());
 
-                if (clients.size() < 2) {
-                    ClientHandler clientHandler = new ClientHandler(clientSocket, this, clients.size() + 1);
-                    clients.add(clientHandler);
-                    pool.execute(clientHandler);
+                synchronized (clients) {
+                    if (clients.size() < 2) {
+                        ClientHandler clientHandler = new ClientHandler(clientSocket, this, clients.size() + 1);
+                        clients.add(clientHandler);
+                        pool.execute(clientHandler);
 
-                    // Определяем роль игрока
-                    String playerRole = (clients.size() == 1) ? "Игрок 1 (Создатель)" : "Игрок 2 (Присоединившийся)";
-                    clientHandler.setPlayerName(playerRole);
-
-                    // Уведомляем о подключении
-                    broadcast(new NetworkMessage(MessageType.PLAYER_JOIN,
-                        playerRole + " подключился к игре"), null);
-
-                    if (clients.size() == 2) {
-                        System.out.println("🎲 Оба игрока подключены! Начинаем игру...");
-                        startGame();
+                        // Не назначаем роль и не стартуем игру здесь —
+                        // дождёмся, пока клиент инициализирует streams и вызовет onClientReady().
+                    } else {
+                        System.out.println("❌ Игра уже заполнена, отказ в подключении");
+                        clientSocket.close();
                     }
-                } else {
-                    System.out.println("❌ Игра уже заполнена, отказ в подключении");
-                    clientSocket.close();
                 }
             }
         } catch (IOException e) {
@@ -71,68 +73,123 @@ public class Server implements Runnable {
         }
     }
 
+    /**
+     * Вызывается из ClientHandler после успешной инициализации streams.
+     */
+    public void onClientReady(ClientHandler handler) {
+        // Помечаем как готового
+        readyHandlers.add(handler);
+
+        // Назначаем понятное имя/роль (на основе позиции в списке clients)
+        int idx;
+        synchronized (clients) {
+            idx = clients.indexOf(handler);
+        }
+        String playerRole = (idx == 0) ? "Игрок 1 (Создатель)" : "Игрок 2 (Присоединившийся)";
+        handler.setPlayerName(playerRole);
+
+        // Рассылаем всем, что этот игрок подключился
+        broadcast(new NetworkMessage(MessageType.PLAYER_JOIN,
+            playerRole + " подключился к игре"), null);
+
+        System.out.println("▶ Клиент готов: " + playerRole + " (готовых " + readyHandlers.size() + ")");
+
+        // Если все клиенты готовы и их ровно 2 — стартуем игру
+        if (readyHandlers.size() == clients.size() && clients.size() == 2) {
+            System.out.println("🎲 Все клиенты готовы — стартуем игру");
+            startGame();
+        }
+    }
+
     private void startGame() {
-        System.out.println("▶ startGame(): clients.size()=" + clients.size());
-        // Инициализируем игровую сессию
+        System.out.println("=== НАЧАЛО ИГРЫ ===");
+        System.out.println("Клиентов: " + clients.size());
+
         gameSession.initializeGame();
 
-        // Отправляем начальное состояние каждому игроку
         for (int i = 0; i < clients.size(); i++) {
             ClientHandler client = clients.get(i);
             Player player = (i == 0) ? gameSession.getPlayer1() : gameSession.getPlayer2();
             Player opponent = (i == 0) ? gameSession.getPlayer2() : gameSession.getPlayer1();
 
-            // Создаем персональное состояние игры для каждого клиента
+            // Четко определяем, чей сейчас ход - только первый игрок!
+            boolean isPlayerTurn = (i == 0);
+
+            System.out.println("Игрок " + (i+1) + ": " + player.getName() +
+                " | Ход: " + (isPlayerTurn ? "ДА" : "НЕТ"));
+
             GameState playerGameState = new GameState(
                 player,
                 opponent,
-                i == 0, // Первый игрок ходит первым
-                i == 0 ? "Ваш ход! Выберите карту" : "Ход противника. Ожидайте..."
+                isPlayerTurn,
+                isPlayerTurn ? "Ваш ход! Выберите карту" : "Ход противника. Ожидайте..."
             );
 
-            // Отправляем начальные карты
+            // Отправляем начальные карты (без аварий)
             List<Card> initialHand = generateInitialHand();
             player.getHand().addAll(initialHand);
 
             // Отправляем состояние клиенту
             client.sendMessage(new NetworkMessage(MessageType.GAME_UPDATE, playerGameState));
             client.sendMessage(new NetworkMessage(MessageType.CHAT_MESSAGE,
-                "🎮 Игра началась! Вы " + (i == 0 ? "игрок 1" : "игрок 2")));
+                "🎮 Игра началась! Вы " + (i == 0 ? "игрок 1 (ходит первым)" : "игрок 2 (ожидайте)")));
+
+            // Отправляем явное сообщение о ходе
+            client.sendMessage(new NetworkMessage(MessageType.YOUR_TURN, isPlayerTurn));
         }
 
-        // Уведомляем всех о начале игры
         broadcast(new NetworkMessage(MessageType.CHAT_MESSAGE,
             "⚔ БИТВА НАЧАЛАСЬ! ⚔"), null);
-        System.out.println("▶ Отправлены GAME_UPDATE всем клиентам");
+        System.out.println("▶ Отправлены GAME_UPDATE и YOUR_TURN всем клиентам");
     }
 
+    /**
+     * Безопасное создание начальной руки — имя карты выбирается в зависимости от категории типа карты.
+     */
     private List<Card> generateInitialHand() {
         List<Card> hand = new ArrayList<>();
         Random random = new Random();
-        CardType[] types = CardType.values();
 
-        String[][] cardNames = {
-            {"Огненный шар", "Ледяная стрела", "Молния", "Кислотный плевок", "Удар тени"},
-            {"Железный щит", "Магический барьер", "Каменная кожа", "Энергетическое поле", "Кристальная защита"},
-            {"Целебное зелье", "Эликсир жизни", "Бальзам здоровья", "Восстанавливающий нектар", "Божественное исцеление"}
+        String[] attackNames = {
+            "Огненный шар", "Ледяная стрела", "Молния", "Удар тени", "Колючий выпад",
+            "Громовой удар", "Теневой выпад"
+        };
+        String[] defendNames = {
+            "Железный щит", "Магический барьер", "Каменная кожа", "Энергетическое поле", "Кристальная защита"
+        };
+        String[] healNames = {
+            "Целебное зелье", "Эликсир жизни", "Бальзам здоровья", "Восстанавливающий нектар", "Божественное исцеление"
         };
 
-        // Даем по 3 карты каждого типа для баланса
-        for (int i = 0; i < 3; i++) {
-            CardType type = types[i];
-            String name = cardNames[i][random.nextInt(cardNames[i].length)];
-            hand.add(new Card(type, name));
-        }
+        CardType[] allTypes = CardType.values();
 
-        // Добавляем еще 2 случайные карты
-        for (int i = 0; i < 2; i++) {
-            CardType randomType = types[random.nextInt(types.length)];
-            int typeIndex = randomType.ordinal();
-            String name = cardNames[typeIndex][random.nextInt(cardNames[typeIndex].length)];
-            hand.add(new Card(randomType, name));
+        // Делаем 5 карт в начальной руке
+        for (int i = 0; i < 5; i++) {
+            // выбираем случайный CardType из enum
+            CardType t = allTypes[random.nextInt(allTypes.length)];
+            String name = chooseNameForType(t, attackNames, defendNames, healNames, random);
+            hand.add(new Card(t, name));
         }
 
         return hand;
+    }
+
+    private String chooseNameForType(CardType t, String[] attackNames, String[] defendNames, String[] healNames, Random random) {
+        switch (t) {
+            case ATTACK, DOUBLE_ATTACK, BACKSTAB, FIREBALL, BERSERK_RAGE -> {
+                return attackNames[random.nextInt(attackNames.length)];
+            }
+            case DEFEND, SUPER_SHIELD -> {
+                return defendNames[random.nextInt(defendNames.length)];
+            }
+            case HEAL, ULTIMATE_HEAL, HOLY_LIGHT -> {
+                return healNames[random.nextInt(healNames.length)];
+            }
+            default -> {
+                // На всякий случай — выбираем из атакующих
+                return attackNames[random.nextInt(attackNames.length)];
+            }
+        }
     }
 
     public synchronized void handleCardPlayed(Card card, ClientHandler player) {
@@ -140,6 +197,11 @@ public class Server implements Runnable {
 
         // Применяем эффект карты в игровой сессии
         String result = gameSession.playCard(card, player.getPlayerId());
+
+        // Если ход был успешным, меняем текущего игрока
+        if (!result.startsWith("⚠")) {
+            gameSession.switchTurn();
+        }
 
         // Отправляем результат всем игрокам
         broadcast(new NetworkMessage(MessageType.CHAT_MESSAGE, result), null);
@@ -150,25 +212,29 @@ public class Server implements Runnable {
             Player currentPlayer = (i == 0) ? gameSession.getPlayer1() : gameSession.getPlayer2();
             Player opponent = (i == 0) ? gameSession.getPlayer2() : gameSession.getPlayer1();
 
-            // Проверяем, чей сейчас ход
-            boolean isPlayerTurn = (gameSession.isPlayer1Turn() && i == 0) ||
-                (!gameSession.isPlayer1Turn() && i == 1);
+            // Определяем, чей сейчас ход
+            boolean isPlayerTurn = gameSession.isPlayerTurn(currentPlayer);
 
             GameState updatedState = new GameState(
                 currentPlayer,
                 opponent,
                 isPlayerTurn,
-                isPlayerTurn ? "Ваш ход! Выберите карту" : "Ход противника. Ожидайте..."
+                isPlayerTurn ? "🎯 ВАШ ХОД" : "⏳ ХОД ПРОТИВНИКА"
             );
 
             client.sendMessage(new NetworkMessage(MessageType.GAME_UPDATE, updatedState));
 
-            // Если ход клиента, даем ему новую карту
-            if (isPlayerTurn) {
+            // Отправляем явное указание о ходе
+            client.sendMessage(new NetworkMessage(MessageType.YOUR_TURN, isPlayerTurn));
+
+            // Если ход клиента, даем ему новую карту (только если ход успешный)
+            if (isPlayerTurn && !result.startsWith("⚠") && gameSession.getCurrentPlayer().equals(currentPlayer)) {
                 Card newCard = drawRandomCard();
-                currentPlayer.getHand().add(newCard);
-                client.sendMessage(new NetworkMessage(MessageType.CHAT_MESSAGE,
-                    "🎴 Вы получили новую карту: " + newCard.getName()));
+                if (newCard != null) {
+                    currentPlayer.getHand().add(newCard);
+                    client.sendMessage(new NetworkMessage(MessageType.CHAT_MESSAGE,
+                        "🎴 Вы получили новую карту: " + newCard.getName()));
+                }
             }
         }
 
@@ -178,26 +244,49 @@ public class Server implements Runnable {
             broadcast(new NetworkMessage(MessageType.CHAT_MESSAGE, victoryMessage), null);
             broadcast(new NetworkMessage(MessageType.CHAT_MESSAGE,
                 "🔄 Игра завершена. Создайте новую игру для повторной битвы."), null);
+
+            // Отправляем сообщение о завершении игры
+            broadcast(new NetworkMessage(MessageType.GAME_OVER, victoryMessage), null);
         }
     }
 
     private Card drawRandomCard() {
-        Random random = new Random();
-        CardType[] types = CardType.values();
-        CardType randomType = types[random.nextInt(types.length)];
+        try {
+            Random random = new Random();
+            CardType[] types = CardType.values();
+            CardType randomType = types[random.nextInt(types.length)];
 
-        String[][] cardNames = {
-            {"Огненный шар", "Ледяная стрела", "Молния", "Удар кинжалом", "Ядовитый укус"},
-            {"Железный щит", "Магический барьер", "Доспех дракона", "Эгида защиты", "Священный щит"},
-            {"Целебное зелье", "Эликсир жизни", "Нектар здоровья", "Бальзам восстановления", "Настойка выносливости"}
-        };
+            String[] attackNames = {
+                "Огненный шар", "Ледяная стрела", "Молния", "Удар кинжалом", "Ядовитый укус"
+            };
+            String[] defendNames = {
+                "Железный щит", "Магический барьер", "Доспех дракона", "Эгида защиты", "Священный щит"
+            };
+            String[] healNames = {
+                "Целебное зелье", "Эликсир жизни", "Нектар здоровья", "Бальзам восстановления", "Настойка выносливости"
+            };
 
-        String name = cardNames[randomType.ordinal()][random.nextInt(cardNames[randomType.ordinal()].length)];
-        return new Card(randomType, name);
+            String name;
+            switch (randomType) {
+                case ATTACK, DOUBLE_ATTACK, BACKSTAB, FIREBALL, BERSERK_RAGE -> name = attackNames[random.nextInt(attackNames.length)];
+                case DEFEND, SUPER_SHIELD -> name = defendNames[random.nextInt(defendNames.length)];
+                case HEAL, ULTIMATE_HEAL, HOLY_LIGHT -> name = healNames[random.nextInt(healNames.length)];
+                default -> name = attackNames[random.nextInt(attackNames.length)];
+            }
+            return new Card(randomType, name);
+        } catch (Exception e) {
+            System.err.println("❌ Ошибка при создании карты: " + e.getMessage());
+            return null;
+        }
     }
 
     public synchronized void broadcast(NetworkMessage message, ClientHandler exclude) {
-        for (ClientHandler client : clients) {
+        // Копия списка, чтобы итерация была безопасной
+        ClientHandler[] snapshot;
+        synchronized (clients) {
+            snapshot = clients.toArray(new ClientHandler[0]);
+        }
+        for (ClientHandler client : snapshot) {
             if (client != exclude) {
                 client.sendMessage(message);
             }
@@ -205,7 +294,11 @@ public class Server implements Runnable {
     }
 
     public void removeClient(ClientHandler client) {
-        clients.remove(client);
+        synchronized (clients) {
+            clients.remove(client);
+        }
+        readyHandlers.remove(client);
+
         System.out.println("👋 Клиент отключен. Осталось игроков: " + clients.size());
 
         if (clients.size() < 2) {
@@ -216,12 +309,16 @@ public class Server implements Runnable {
 
     public void shutdown() {
         running = false;
-        pool.shutdown();
+        pool.shutdownNow();
         try {
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
             }
-            for (ClientHandler client : clients) {
+            ClientHandler[] snapshot;
+            synchronized (clients) {
+                snapshot = clients.toArray(new ClientHandler[0]);
+            }
+            for (ClientHandler client : snapshot) {
                 client.disconnect();
             }
         } catch (IOException e) {
@@ -229,11 +326,11 @@ public class Server implements Runnable {
         }
     }
 
-    // Внутренний класс для обработки игровой сессии
+    // Внутренний класс для обработки игровой сессии (без изменений)
     private class GameSession {
         private Player player1;
         private Player player2;
-        private boolean isPlayer1Turn;
+        private Player currentPlayer; // Текущий игрок
         private Random random;
 
         public GameSession() {
@@ -243,9 +340,21 @@ public class Server implements Runnable {
         public void initializeGame() {
             player1 = new Player("Игрок 1");
             player2 = new Player("Игрок 2");
-            isPlayer1Turn = true; // Первым ходит создатель игры
+            currentPlayer = player1; // Первый игрок ходит первым
+            System.out.println("🔄 Игровая сессия инициализирована. Первый ход: " + currentPlayer.getName());
+        }
 
-            System.out.println("🔄 Игровая сессия инициализирована");
+        public void switchTurn() {
+            if (currentPlayer == player1) {
+                currentPlayer = player2;
+            } else {
+                currentPlayer = player1;
+            }
+            System.out.println("🔄 Смена хода. Теперь ходит: " + currentPlayer.getName());
+        }
+
+        public boolean isPlayerTurn(Player player) {
+            return currentPlayer != null && currentPlayer.equals(player);
         }
 
         public String playCard(Card card, int playerId) {
@@ -253,23 +362,27 @@ public class Server implements Runnable {
             Player opponent = (playerId == 1) ? player2 : player1;
 
             // Проверяем, правильный ли игрок ходит
-            if ((playerId == 1 && !isPlayer1Turn) || (playerId == 2 && isPlayer1Turn)) {
+            if (!isPlayerTurn(currentPlayer)) {
+                System.out.println("⚠ Неправильный ход! Игрок " + playerId +
+                    " пытался походить, но сейчас ход игрока " +
+                    (this.currentPlayer == player1 ? "1" : "2"));
                 return "⚠ Не ваш ход!";
             }
 
-            // Удаляем карту из руки
-            boolean cardRemoved = currentPlayer.getHand().removeIf(c ->
-                c.getName().equals(card.getName()) && c.getType() == card.getType());
+            // Проверяем, есть ли карта в руке
+            Optional<Card> cardInHand = currentPlayer.getHand().stream()
+                .filter(c -> c.getName().equals(card.getName()) && c.getType() == card.getType())
+                .findFirst();
 
-            if (!cardRemoved) {
+            if (cardInHand.isEmpty()) {
                 return "⚠ Карта не найдена в руке!";
             }
 
+            // Удаляем карту из руки
+            currentPlayer.getHand().remove(cardInHand.get());
+
             // Применяем эффект карты
             String actionMessage = applyCardEffect(card, currentPlayer, opponent);
-
-            // Меняем ход
-            isPlayer1Turn = !isPlayer1Turn;
 
             return actionMessage;
         }
@@ -277,40 +390,78 @@ public class Server implements Runnable {
         private String applyCardEffect(Card card, Player currentPlayer, Player opponent) {
             StringBuilder message = new StringBuilder();
 
+            // Применяем множители персонажа
             switch (card.getType()) {
                 case ATTACK:
-                    int damage = 2;
-                    if (opponent.getShield() > 0) {
-                        int remainingShield = opponent.getShield() - damage;
-                        if (remainingShield >= 0) {
-                            opponent.setShield(remainingShield);
-                            message.append("⚔ ").append(currentPlayer.getName())
-                                .append(" атакует! Щит противника поглотил ").append(damage).append(" урона.");
-                        } else {
-                            opponent.setShield(0);
-                            opponent.setHealth(opponent.getHealth() + remainingShield); // remainingShield отрицательный
-                            message.append("⚔ ").append(currentPlayer.getName())
-                                .append(" атакует! Пробит щит и нанесено ").append(-remainingShield).append(" урона!");
-                        }
+                case DOUBLE_ATTACK:
+                case BACKSTAB:
+                case FIREBALL:
+                    int baseDamage = card.getValue();
+                    int actualDamage = currentPlayer.calculateAttackDamage(baseDamage);
+
+                    if (card.getType() == CardType.FIREBALL) {
+                        opponent.takeDamage(actualDamage);
+                        message.append("🔥 ").append(currentPlayer.getName())
+                            .append(" (").append(currentPlayer.getCharacter().getName())
+                            .append(") бросает огненный шар! Нанесено ")
+                            .append(actualDamage).append(" урона.");
                     } else {
-                        opponent.setHealth(opponent.getHealth() - damage);
+                        opponent.takeDamage(actualDamage);
                         message.append("⚔ ").append(currentPlayer.getName())
-                            .append(" атакует! Нанесено ").append(damage).append(" урона!");
+                            .append(" (").append(currentPlayer.getCharacter().getName())
+                            .append(") атакует! Нанесено ")
+                            .append(actualDamage).append(" урона.");
+
+                        if (card.getType() == CardType.BACKSTAB) {
+                            message.append(" (Игнорирует защиту!)");
+                        }
                     }
                     break;
 
-                case DEFENSE:
-                    currentPlayer.setShield(currentPlayer.getShield() + 1);
+                case DEFEND:
+                case SUPER_SHIELD:
+                    int baseShield = card.getValue();
+                    int actualShield = currentPlayer.calculateShield(baseShield);
+                    currentPlayer.addShield(actualShield);
+
                     message.append("🛡 ").append(currentPlayer.getName())
-                        .append(" укрепляет защиту! +1 щит.");
+                        .append(" (").append(currentPlayer.getCharacter().getName())
+                        .append(") ставит щит! +").append(actualShield)
+                        .append(" защиты.");
                     break;
 
                 case HEAL:
-                    int newHealth = Math.min(10, currentPlayer.getHealth() + 1);
-                    int healed = newHealth - currentPlayer.getHealth();
-                    currentPlayer.setHealth(newHealth);
+                case ULTIMATE_HEAL:
+                    int baseHeal = card.getValue();
+                    int actualHeal = currentPlayer.calculateHealing(baseHeal);
+                    currentPlayer.heal(actualHeal);
+
                     message.append("❤ ").append(currentPlayer.getName())
-                        .append(" лечится! Восстановлено ").append(healed).append(" HP.");
+                        .append(" (").append(currentPlayer.getCharacter().getName())
+                        .append(") лечится! +").append(actualHeal)
+                        .append(" здоровья.");
+                    break;
+
+                case BERSERK_RAGE:
+                    int rageDamage = currentPlayer.calculateAttackDamage(card.getValue());
+                    opponent.takeDamage(rageDamage);
+                    currentPlayer.takeDamage(2); // Сам получает урон
+
+                    message.append("😡 ").append(currentPlayer.getName())
+                        .append(" (").append(currentPlayer.getCharacter().getName())
+                        .append(") впадает в ярость! Нанесено ")
+                        .append(rageDamage).append(" урона, но сам получил 2 урона.");
+                    break;
+
+                case HOLY_LIGHT:
+                    int holyHeal = currentPlayer.calculateHealing(card.getValue());
+                    currentPlayer.heal(holyHeal);
+                    currentPlayer.addShield(1);
+
+                    message.append("✨ ").append(currentPlayer.getName())
+                        .append(" (").append(currentPlayer.getCharacter().getName())
+                        .append(") использует святой свет! +")
+                        .append(holyHeal).append(" здоровья и +1 защита.");
                     break;
             }
 
@@ -328,7 +479,8 @@ public class Server implements Runnable {
 
         public Player getPlayer1() { return player1; }
         public Player getPlayer2() { return player2; }
-        public boolean isPlayer1Turn() { return isPlayer1Turn; }
+        public boolean isPlayer1Turn() { return currentPlayer == player1; }
+        public Player getCurrentPlayer() { return currentPlayer; }
     }
 
     // Внутренний класс для обработки клиентов
@@ -337,9 +489,12 @@ public class Server implements Runnable {
         private Server server;
         private ObjectOutputStream out;
         private ObjectInputStream in;
+        @Getter
         private int playerId;
+        @Getter
+        @Setter
         private String playerName;
-        private boolean connected;
+        private volatile boolean connected;
 
         public ClientHandler(Socket socket, Server server, int playerId) {
             this.socket = socket;
@@ -358,6 +513,9 @@ public class Server implements Runnable {
 
                 System.out.println("🔗 ClientHandler[" + playerId + "]: streams initialized for " + socket.getInetAddress());
 
+                // Сообщаем серверу, что этот handler готов (streams готовы)
+                server.onClientReady(this);
+
                 // Отправляем приветственное сообщение
                 sendMessage(new NetworkMessage(MessageType.CHAT_MESSAGE,
                     "🎮 Добро пожаловать в Dungeon Mayhem! Вы " + playerName));
@@ -373,10 +531,13 @@ public class Server implements Runnable {
                         NetworkMessage message = (NetworkMessage) in.readObject();
                         handleMessage(message);
                     } catch (EOFException | SocketException e) {
+                        System.out.println("📡 Клиент " + playerId + " отключился: " + e.getMessage());
                         break; // Клиент отключился
+                    } catch (ClassNotFoundException e) {
+                        System.err.println("❌ Ошибка десериализации от игрока " + playerId + ": " + e.getMessage());
                     }
                 }
-            } catch (IOException | ClassNotFoundException e) {
+            } catch (IOException e) {
                 System.err.println("❌ Ошибка обработки клиента " + playerId + ": " + e.getMessage());
             } finally {
                 disconnect();
@@ -384,21 +545,27 @@ public class Server implements Runnable {
         }
 
         private void handleMessage(NetworkMessage message) {
-            switch (message.getType()) {
-                case CARD_PLAYED:
-                    Card card = (Card) message.getData();
-                    server.handleCardPlayed(card, this);
-                    break;
+            try {
+                if (message == null || message.getType() == null) return;
 
-                case CHAT_MESSAGE:
-                    String chatMessage = (String) message.getData();
-                    // Добавляем имя отправителя
-                    String formattedMessage = playerName + ": " + chatMessage;
-                    server.broadcast(new NetworkMessage(MessageType.CHAT_MESSAGE, formattedMessage), this);
-                    break;
-
-                default:
-                    System.out.println("❓ Неизвестный тип сообщения от игрока " + playerId + ": " + message.getType());
+                switch (message.getType()) {
+                    case CARD_PLAYED -> {
+                        Card card = (Card) message.getData();
+                        server.handleCardPlayed(card, this);
+                    }
+                    case CHAT_MESSAGE -> {
+                        String chatMessage = (String) message.getData();
+                        // Форматируем сообщение
+                        String formattedMessage = playerName + ": " + chatMessage;
+                        // Отправляем всем, включая отправителя
+                        server.broadcast(new NetworkMessage(MessageType.CHAT_MESSAGE, formattedMessage), null);
+                    }
+                    default -> {
+                        System.out.println("❓ Неизвестный тип сообщения от игрока " + playerId + ": " + message.getType());
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("❌ Ошибка обработки сообщения от игрока " + playerId + ": " + e.getMessage());
             }
         }
 
@@ -408,8 +575,8 @@ public class Server implements Runnable {
                 out.writeObject(message);
                 out.flush();
                 out.reset();
-                System.out.println("📤 Server -> player" + playerId + ": " + message.getType() + " (" +
-                    (message.getData() != null ? message.getData().toString() : "null") + ")");
+                System.out.println("📤 Server -> player" + playerId + ": " + message.getType() +
+                    (message.getData() != null ? " (данные отправлены)" : " (без данных)"));
             } catch (IOException e) {
                 System.err.println("❌ Ошибка отправки сообщения игроку " + playerId + ": " + e.getMessage());
                 disconnect();
@@ -417,6 +584,8 @@ public class Server implements Runnable {
         }
 
         private void disconnect() {
+            if (!connected) return;
+
             connected = false;
             try {
                 if (in != null) in.close();
@@ -429,9 +598,5 @@ public class Server implements Runnable {
                 System.err.println("❌ Ошибка при отключении игрока " + playerId + ": " + e.getMessage());
             }
         }
-
-        public int getPlayerId() { return playerId; }
-        public String getPlayerName() { return playerName; }
-        public void setPlayerName(String name) { this.playerName = name; }
     }
 }

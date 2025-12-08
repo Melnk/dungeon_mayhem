@@ -8,7 +8,7 @@ public class OpponentAI {
         int r = rnd.nextInt(3);
         return switch (r) {
             case 0 -> new Card(CardType.ATTACK, "Темный удар");
-            case 1 -> new Card(CardType.DEFENSE, "Теневой щит");
+            case 1 -> new Card(CardType.DEFEND, "Теневой щит");
             default -> new Card(CardType.HEAL, "Темное зелье");
         };
     }

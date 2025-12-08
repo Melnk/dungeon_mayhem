@@ -8,7 +8,7 @@ public class TestNetwork {
 
         // Тест создания карт
         Card attackCard = new Card(CardType.ATTACK, "Огненный шар");
-        Card defenseCard = new Card(CardType.DEFENSE, "Магический щит");
+        Card defenseCard = new Card(CardType.DEFEND, "Магический щит");
         Card healCard = new Card(CardType.HEAL, "Целебное зелье");
 
         System.out.println("Карты созданы:");

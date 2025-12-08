@@ -2,6 +2,8 @@ package com.example.dungeon.network;
 
 import com.example.dungeon.game.Card;
 import com.example.dungeon.game.CardType;
+import lombok.Getter;
+import lombok.Setter;
 import java.io.*;
 import java.net.*;
 import java.util.Random;

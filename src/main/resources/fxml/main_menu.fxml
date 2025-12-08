@@ -2,62 +2,187 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
+<?import javafx.scene.effect.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.text.*?>
 
 <?import java.net.URL?>
 <VBox xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="com.example.dungeon.ui.MainMenuController"
-      spacing="20" style="-fx-background-color: #2b2b2b; -fx-padding: 20;">
+      spacing="15" prefWidth="900" prefHeight="700"
+      style="-fx-background-color: #1a1a1a; -fx-padding: 25;">
 
     <stylesheets>
         <URL value="@../styles/main.css" />
     </stylesheets>
 
-    <Label text="Dungeon Mayhem" style="-fx-text-fill: white; -fx-font-size: 32; -fx-font-weight: bold;">
-        <font>
-            <Font name="System Bold" size="32.0" />
-        </font>
-    </Label>
+    <!-- Заголовок с эффектами -->
+    <VBox alignment="CENTER" spacing="5">
+        <Label text="DUNGEON"
+               style="-fx-text-fill: #ffcc00; -fx-font-size: 56px; -fx-font-weight: 900;">
+            <effect>
+                <DropShadow color="#000000" radius="0" spread="0.8" offsetX="3" offsetY="3"/>
+                <DropShadow color="#996600" radius="20" spread="0.2" offsetX="0" offsetY="0"/>
+            </effect>
+        </Label>
+        <Label text="MAYHEM"
+               style="-fx-text-fill: #ff6600; -fx-font-size: 60px; -fx-font-weight: 900; -fx-font-style: italic;">
+            <effect>
+                <DropShadow color="#000000" radius="0" spread="0.8" offsetX="3" offsetY="3"/>
+                <InnerShadow color="#884400" radius="8" choke="0.4"/>
+            </effect>
+        </Label>
+        <Separator style="-fx-background-color: linear-gradient(to right, #ff9900, #ff6600);
+                         -fx-pref-width: 400; -fx-pref-height: 3;"/>
+    </VBox>
 
-    <HBox spacing="20">
+    <HBox spacing="30" alignment="TOP_CENTER">
         <!-- Левая панель - управление игрой -->
-        <VBox spacing="15" prefWidth="300">
-            <Label text="Игра" style="-fx-text-fill: white; -fx-font-size: 18;"/>
+        <VBox spacing="15" prefWidth="320">
+            <Label text="⚔️ УПРАВЛЕНИЕ"
+                   style="-fx-text-fill: #ffcc00; -fx-font-size: 20px; -fx-font-weight: bold;">
+                <effect>
+                    <DropShadow color="#996600" radius="4" offsetX="2" offsetY="2"/>
+                </effect>
+            </Label>
 
-            <Button text="Создать сервер" onAction="#createServer"
-                    style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14;"
-                    prefWidth="200" prefHeight="40"/>
+            <!-- Стилизованные кнопки -->
+            <VBox spacing="12">
+                <Button text="🎮 СОЗДАТЬ СЕРВЕР" onAction="#createServer"
+                        style="-fx-background-color: linear-gradient(to bottom, #8b4513, #a0522d);
+                               -fx-text-fill: #ffcc99; -fx-font-size: 16px; -fx-font-weight: bold;
+                               -fx-background-radius: 12; -fx-border-color: #d2691e; -fx-border-width: 2;
+                               -fx-border-radius: 12; -fx-padding: 12;"
+                        prefWidth="300" prefHeight="50">
+                    <effect>
+                        <DropShadow color="#5d4037" radius="8" offsetX="2" offsetY="2"/>
+                    </effect>
+                </Button>
 
-            <HBox spacing="10">
-                <TextField fx:id="ipAddressField" promptText="IP адрес"
-                           prefWidth="140" prefHeight="40"/>
-                <Button text="Подключиться" onAction="#connectToServer"
-                        style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-size: 14;"
-                        prefWidth="120" prefHeight="40"/>
-            </HBox>
+                <HBox spacing="12">
+                    <TextField fx:id="ipAddressField" promptText="Введите IP адрес..."
+                               style="-fx-background-color: #2a2a2a; -fx-text-fill: #ffcc99;
+                                      -fx-background-radius: 8; -fx-border-color: #d2691e;
+                                      -fx-border-radius: 8; -fx-padding: 10; -fx-font-size: 14px;"
+                               prefWidth="200" prefHeight="45"/>
+                    <Button text="🔗 ПОДКЛЮЧИТЬСЯ" onAction="#connectToServer"
+                            style="-fx-background-color: linear-gradient(to bottom, #654321, #8b4513);
+                                   -fx-text-fill: #ffcc99; -fx-font-size: 14px; -fx-font-weight: bold;
+                                   -fx-background-radius: 10; -fx-border-color: #d2691e; -fx-border-width: 2;
+                                   -fx-border-radius: 10; -fx-padding: 10;"
+                            prefWidth="140" prefHeight="45">
+                        <effect>
+                            <DropShadow color="#4e342e" radius="6" offsetX="2" offsetY="2"/>
+                        </effect>
+                    </Button>
+                </HBox>
 
-            <Button text="Начать игру" onAction="#startGame"
-                    style="-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14;"
-                    prefWidth="200" prefHeight="40"/>
+                <Button text="⚔️ НАЧАТЬ ИГРУ" onAction="#startGame"
+                        style="-fx-background-color: linear-gradient(to bottom, #daa520, #b8860b);
+                               -fx-text-fill: #fff8dc; -fx-font-size: 18px; -fx-font-weight: bold;
+                               -fx-background-radius: 12; -fx-border-color: #ffd700; -fx-border-width: 3;
+                               -fx-border-radius: 12; -fx-padding: 14;"
+                        prefWidth="300" prefHeight="55">
+                    <effect>
+                        <Glow level="0.2"/>
+                        <DropShadow color="#b8860b" radius="12" offsetX="0" offsetY="0"/>
+                    </effect>
+                </Button>
 
-            <Label fx:id="connectionStatus" text="Не подключено"
-                   style="-fx-text-fill: #ff4444; -fx-font-size: 12;"/>
+                <!-- Статус подключения -->
+                <HBox spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 8; -fx-background-color: #2a2a2a; -fx-background-radius: 8;">
+                    <Label text="Статус:" style="-fx-text-fill: #ffcc99; -fx-font-weight: bold;"/>
+                    <Label fx:id="connectionStatus" text="⚪ Не подключено"
+                           style="-fx-text-fill: #ff9999; -fx-font-size: 14px;"/>
+                </HBox>
+            </VBox>
+        </VBox>
+
+        <!-- Центральная панель - информация о персонажах -->
+        <VBox spacing="15" prefWidth="280" style="-fx-background-color: #2a2a2a; -fx-background-radius: 12; -fx-padding: 15;">
+            <Label text="🎭 ПЕРСОНАЖИ"
+                   style="-fx-text-fill: #ffcc00; -fx-font-size: 20px; -fx-font-weight: bold;">
+                <effect>
+                    <DropShadow color="#996600" radius="4" offsetX="2" offsetY="2"/>
+                </effect>
+            </Label>
+
+            <VBox spacing="10">
+                <VBox spacing="5" style="-fx-background-color: #3a3a3a; -fx-background-radius: 8; -fx-padding: 10;">
+                    <Label text="⚔️ ВАРВАР" style="-fx-text-fill: #ff6666; -fx-font-weight: bold;"/>
+                    <Label text="❤ HP: 35 | ⚔ Атака: x1.5" style="-fx-text-fill: #ffcc99; -fx-font-size: 12px;"/>
+                    <Label text="✨ Ярость берсерка" style="-fx-text-fill: #ff9999; -fx-font-size: 11px;"/>
+                </VBox>
+
+                <VBox spacing="5" style="-fx-background-color: #3a3a3a; -fx-background-radius: 8; -fx-padding: 10;">
+                    <Label text="🛡️ ПАЛАДИН" style="-fx-text-fill: #66aaff; -fx-font-weight: bold;"/>
+                    <Label text="❤ HP: 40 | 🛡 Защита: x1.6" style="-fx-text-fill: #ffcc99; -fx-font-size: 12px;"/>
+                    <Label text="✨ Святой щит" style="-fx-text-fill: #99ccff; -fx-font-size: 11px;"/>
+                </VBox>
+
+                <VBox spacing="5" style="-fx-background-color: #3a3a3a; -fx-background-radius: 8; -fx-padding: 10;">
+                    <Label text="🗡️ ПЛУТ" style="-fx-text-fill: #ffcc66; -fx-font-weight: bold;"/>
+                    <Label text="❤ HP: 25 | ⚔ Атака: x1.8" style="-fx-text-fill: #ffcc99; -fx-font-size: 12px;"/>
+                    <Label text="✨ Критический удар" style="-fx-text-fill: #ffdd99; -fx-font-size: 11px;"/>
+                </VBox>
+
+                <VBox spacing="5" style="-fx-background-color: #3a3a3a; -fx-background-radius: 8; -fx-padding: 10;">
+                    <Label text="🔮 МАГ" style="-fx-text-fill: #cc99ff; -fx-font-weight: bold;"/>
+                    <Label text="❤ HP: 30 | ❤ Лечение: x1.5" style="-fx-text-fill: #ffcc99; -fx-font-size: 12px;"/>
+                    <Label text="✨ Магический барьер" style="-fx-text-fill: #ddbbff; -fx-font-size: 11px;"/>
+                </VBox>
+            </VBox>
+
+            <Button text="ℹ️ ПРАВИЛА" onAction="#showHelp"
+                    style="-fx-background-color: #4a4a4a; -fx-text-fill: #ffcc99; -fx-font-weight: bold;
+                           -fx-background-radius: 8; -fx-border-color: #666666; -fx-border-width: 1;
+                           -fx-border-radius: 8; -fx-padding: 8;"
+                    prefWidth="250" prefHeight="35"/>
         </VBox>
 
         <!-- Правая панель - общий чат -->
-        <VBox spacing="10" VBox.vgrow="ALWAYS">
-            <Label text="Общий чат" style="-fx-text-fill: white; -fx-font-size: 18;"/>
+        <VBox spacing="12" prefWidth="300">
+            <Label text="💬 БОЕВОЙ ЧАТ"
+                   style="-fx-text-fill: #ffcc00; -fx-font-size: 20px; -fx-font-weight: bold;">
+                <effect>
+                    <DropShadow color="#996600" radius="4" offsetX="2" offsetY="2"/>
+                </effect>
+            </Label>
 
-            <TextArea fx:id="chatArea" editable="false"
-                      style="-fx-control-inner-background: #1e1e1e; -fx-text-fill: white;"
-                      VBox.vgrow="ALWAYS"/>
+            <TextArea fx:id="chatArea" editable="false" wrapText="true"
+                      style="-fx-control-inner-background: #2a2a2a; -fx-text-fill: #ffcc99;
+                             -fx-font-size: 14px; -fx-background-radius: 12; -fx-border-color: #8b4513;
+                             -fx-border-radius: 12; -fx-border-width: 2;"
+                      prefHeight="400" VBox.vgrow="ALWAYS"/>
 
             <HBox spacing="10">
-                <TextField fx:id="messageField" promptText="Введите сообщение..."
-                           HBox.hgrow="ALWAYS" onAction="#sendMessage"/>
-                <Button text="Отправить" onAction="#sendMessage"
-                        style="-fx-background-color: #666; -fx-text-fill: white;"/>
+                <TextField fx:id="messageField" promptText="Напишите сообщение..."
+                           style="-fx-background-color: #3a3a3a; -fx-text-fill: #ffcc99;
+                                  -fx-background-radius: 8; -fx-border-color: #8b4513;
+                                  -fx-border-radius: 8; -fx-padding: 10; -fx-font-size: 14px;"
+                           HBox.hgrow="ALWAYS"/>
+                <Button text="➤" onAction="#sendMessage"
+                        style="-fx-background-color: linear-gradient(to bottom, #daa520, #b8860b);
+                               -fx-text-fill: #fff8dc; -fx-font-weight: bold; -fx-font-size: 16px;
+                               -fx-background-radius: 8; -fx-border-color: #ffd700; -fx-border-width: 2;
+                               -fx-border-radius: 8; -fx-pref-width: 45; -fx-pref-height: 45;">
+                    <effect>
+                        <DropShadow color="#b8860b" radius="5" offsetX="2" offsetY="2"/>
+                    </effect>
+                </Button>
+            </HBox>
+
+            <HBox spacing="10">
+                <Button text="🗑️ Очистить" onAction="#clearChat"
+                        style="-fx-background-color: #5a5a5a; -fx-text-fill: #ffcc99;
+                               -fx-background-radius: 8; -fx-border-color: #666666; -fx-border-width: 1;
+                               -fx-border-radius: 8; -fx-padding: 8;"
+                        HBox.hgrow="ALWAYS"/>
+                <Button text="🚪 Выход" onAction="#exitApplication"
+                        style="-fx-background-color: #8b0000; -fx-text-fill: #ffcccc;
+                               -fx-background-radius: 8; -fx-border-color: #660000; -fx-border-width: 1;
+                               -fx-border-radius: 8; -fx-padding: 8;"
+                        HBox.hgrow="ALWAYS"/>
             </HBox>
         </VBox>
     </HBox>

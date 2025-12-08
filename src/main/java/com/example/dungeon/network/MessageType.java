@@ -1,8 +1,13 @@
 package com.example.dungeon.network;
 
 public enum MessageType {
-    PLAYER_JOIN, // Игрок присоединился к серверу
-    CARD_PLAYED, // Карты сыграна
-    GAME_UPDATE, // Обновление игры
-    CHAT_MESSAGE // Сообщение в чат
+    PLAYER_JOIN,
+    GAME_START,
+    CARD_PLAYED,
+    GAME_UPDATE,
+    CHAT_MESSAGE,
+    YOUR_TURN,
+    PLAYER_INFO,
+    SPECIAL_ABILITY,
+    GAME_OVER
 }

@@ -7,16 +7,12 @@ import java.util.Random;
 
 /**
  * GameEngine — игровая логика, не зависит от JavaFX UI.
- * Умеет стартовать одиночную игру, применять карты, проверять победу и запускать ход противника.
+ * Теперь работает с персонажами и их множителями.
  */
 public class GameEngine {
 
-    private int playerHP = 10;
-    private int playerShield = 0;
-    private int opponentHP = 10;
-    private int opponentShield = 0;
-
-    private final List<Card> playerHand = new ArrayList<>();
+    private Player player;
+    private Player opponent;
     private final Random rnd = new Random();
 
     @Setter
@@ -26,25 +22,93 @@ public class GameEngine {
 
     public boolean isPlayerTurn() { return isPlayerTurn; }
 
+    public boolean isPlayerWinner() {
+        return player.isAlive() && !opponent.isAlive();
+    }
+
     public void startSinglePlayer() {
-        playerHP = 10; playerShield = 0;
-        opponentHP = 10; opponentShield = 0;
-        playerHand.clear();
-        // начальная рука
-        playerHand.add(new Card(CardType.ATTACK, "Огненный шар"));
-        playerHand.add(new Card(CardType.DEFENSE, "Железный щит"));
-        playerHand.add(new Card(CardType.HEAL, "Целебное зелье"));
-        playerHand.add(new Card(CardType.ATTACK, "Удар кинжалом"));
-        playerHand.add(new Card(CardType.DEFENSE, "Магический барьер"));
+        // Создаем игрока и противника с рандомными персонажами
+        player = new Player("Герой");
+        opponent = new Player("Противник");
+
+        // Логируем выбор персонажей
+        System.out.println("🎭 Игрок выбран как: " + player.getCharacter().getName());
+        System.out.println("🎭 Противник выбран как: " + opponent.getCharacter().getName());
+
+        // Очищаем руки и сбрасываем состояние
+        player.getHand().clear();
+        opponent.getHand().clear();
+
+        // Начальные карты для игрока
+        List<Card> initialHand = generateInitialHand();
+        player.getHand().addAll(initialHand);
+
+        // Даем противнику 3 карты для отображения
+        List<Card> opponentHand = generateInitialHand();
+        opponent.getHand().addAll(opponentHand.subList(0, 3)); // Только 3 карты для отображения
 
         isPlayerTurn = true;
         gameOver = false;
 
         if (listener != null) {
+            // Отправляем информацию о персонажах
+            listener.onActionOccurred("⚔️ БИТВА НАЧИНАЕТСЯ!");
+            listener.onActionOccurred("Ваш персонаж: " + player.getCharacter().getName());
+            listener.onActionOccurred("Противник: " + opponent.getCharacter().getName());
+
             listener.onGameStatusUpdated("🎯 ВАШ ХОД");
-            listener.onHealthUpdated(playerHP, playerShield, opponentHP, opponentShield);
-            listener.onHandUpdated(new ArrayList<>(playerHand));
-            listener.onOpponentHandCountUpdated(3); // примерное количество
+            listener.onHealthUpdated(
+                player.getHealth(),
+                player.getShield(),
+                opponent.getHealth(),
+                opponent.getShield()
+            );
+            listener.onHandUpdated(new ArrayList<>(player.getHand()));
+            listener.onOpponentHandCountUpdated(opponent.getHand().size());
+        }
+    }
+
+    private List<Card> generateInitialHand() {
+        List<Card> hand = new ArrayList<>();
+        CardType[] types = CardType.values();
+
+        // Балансировка: даем по 2 карты каждого базового типа
+        String[][] cardNames = {
+            {"Огненный шар", "Ледяная стрела", "Молния", "Удар кинжалом", "Ядовитый укус"},
+            {"Железный щит", "Магический барьер", "Доспех дракона", "Эгида защиты", "Священный щит"},
+            {"Целебное зелье", "Эликсир жизни", "Нектар здоровья", "Бальзам восстановления", "Настойка выносливости"}
+        };
+
+        // По 2 карты каждого базового типа (Атака, Защита, Лечение)
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 2; j++) {
+                String name = cardNames[i][rnd.nextInt(cardNames[i].length)];
+                hand.add(new Card(types[i], name));
+            }
+        }
+
+        // Добавляем 1 специальную карту (если есть больше типов)
+        if (types.length > 3) {
+            CardType specialType = types[3 + rnd.nextInt(types.length - 3)];
+            String specialName = getSpecialCardName(specialType);
+            hand.add(new Card(specialType, specialName));
+        }
+
+        return hand;
+    }
+
+    private String getSpecialCardName(CardType type) {
+        switch (type) {
+            case DOUBLE_ATTACK: return "Двойная атака";
+            case SUPER_SHIELD: return "Супер щит";
+            case ULTIMATE_HEAL: return "Супер лечение";
+            case COMBO_ATTACK: return "Комбо удар";
+            case COUNTER_ATTACK: return "Контратака";
+            case BERSERK_RAGE: return "Ярость берсерка";
+            case HOLY_LIGHT: return "Святой свет";
+            case BACKSTAB: return "Удар в спину";
+            case FIREBALL: return "Огненный шар";
+            default: return "Особая карта";
         }
     }
 
@@ -56,28 +120,35 @@ public class GameEngine {
         if (gameOver) return;
 
         if (!byOpponent) {
-            // игрок
+            // Ход игрока
             if (!isPlayerTurn) {
                 if (listener != null) listener.onActionOccurred("Сейчас не ваш ход!");
                 return;
             }
-            // удаляем карту из руки (по имени+тип)
-            boolean removed = playerHand.removeIf(c -> c.getName().equals(card.getName()) && c.getType() == card.getType());
+
+            // Проверяем, есть ли карта в руке
+            boolean removed = player.getHand().removeIf(c ->
+                c.getName().equals(card.getName()) && c.getType() == card.getType()
+            );
+
             if (!removed) {
                 if (listener != null) listener.onActionOccurred("Карта не найдена в руке!");
                 return;
             }
+
+            // Применяем эффект карты
             applyCardEffect(card, false);
+
             if (listener != null) {
                 listener.onCardPlayed(card, false);
-                listener.onHandUpdated(new ArrayList<>(playerHand));
+                listener.onHandUpdated(new ArrayList<>(player.getHand()));
             }
 
-            //Смена хода
+            // Смена хода
             isPlayerTurn = false;
             if (listener != null) listener.onGameStatusUpdated("⏳ ХОД ПРОТИВНИКА");
 
-            // Запускаем ход противника с заметной задержкой (1300-1600ms)
+            // Запускаем ход противника с заметной задержкой
             new Thread(() -> {
                 try { Thread.sleep(1400); } catch (InterruptedException ignored) {}
                 opponentMakesMove();
@@ -87,83 +158,228 @@ public class GameEngine {
                 if (listener != null) listener.onGameStatusUpdated("🎯 ВАШ ХОД");
             }, "AI-Move-Thread").start();
 
-
         } else {
-            // ход противника (в одиночной игре)
+            // Ход противника (в одиночной игре)
             applyCardEffect(card, true);
             if (listener != null) listener.onCardPlayed(card, true);
         }
     }
 
     private void applyCardEffect(Card card, boolean byOpponent) {
+        Player caster = byOpponent ? opponent : player;
+        Player target = byOpponent ? player : opponent;
+
+        StringBuilder actionMessage = new StringBuilder();
+
         switch (card.getType()) {
-            case ATTACK -> {
-                int dmg = 2;
-                if (byOpponent) {
-                    if (playerShield > 0) {
-                        playerShield -= dmg;
-                        if (playerShield < 0) { playerHP += playerShield; playerShield = 0; }
-                    } else playerHP = Math.max(0, playerHP - dmg);
-                } else {
-                    if (opponentShield > 0) {
-                        opponentShield -= dmg;
-                        if (opponentShield < 0) { opponentHP += opponentShield; opponentShield = 0; }
-                    } else opponentHP = Math.max(0, opponentHP - dmg);
+            case ATTACK:
+                int baseDamage = card.getValue();
+                int actualDamage = caster.calculateAttackDamage(baseDamage);
+                target.takeDamage(actualDamage);
+
+                actionMessage.append("⚔ ").append(caster.getCharacter().getName())
+                    .append(" атакует! Нанесено ").append(actualDamage).append(" урона.");
+                break;
+
+            case DEFEND:
+                int baseShield = card.getValue();
+                int actualShield = caster.calculateShield(baseShield);
+                caster.addShield(actualShield);
+
+                actionMessage.append("🛡 ").append(caster.getCharacter().getName())
+                    .append(" ставит щит! +").append(actualShield).append(" защиты.");
+                break;
+
+            case HEAL:
+                int baseHeal = card.getValue();
+                int actualHeal = caster.calculateHealing(baseHeal);
+                caster.heal(actualHeal);
+
+                actionMessage.append("❤ ").append(caster.getCharacter().getName())
+                    .append(" лечится! +").append(actualHeal).append(" здоровья.");
+                break;
+
+            case DOUBLE_ATTACK:
+                // Двойная атака: наносит урон дважды
+                int doubleDamage = caster.calculateAttackDamage(card.getValue());
+                target.takeDamage(doubleDamage);
+                // Второй удар
+                target.takeDamage(doubleDamage / 2); // Второй удар слабее
+
+                actionMessage.append("⚔⚔ ").append(caster.getCharacter().getName())
+                    .append(" проводит двойную атаку! Нанесено ").append(doubleDamage + doubleDamage / 2).append(" урона.");
+                break;
+
+            case SUPER_SHIELD:
+                int superShield = caster.calculateShield(card.getValue() * 2);
+                caster.addShield(superShield);
+
+                actionMessage.append("🛡🛡 ").append(caster.getCharacter().getName())
+                    .append(" создает супер щит! +").append(superShield).append(" защиты.");
+                break;
+
+            case ULTIMATE_HEAL:
+                int ultimateHeal = caster.calculateHealing(card.getValue() * 2);
+                caster.heal(ultimateHeal);
+
+                actionMessage.append("❤❤ ").append(caster.getCharacter().getName())
+                    .append(" использует супер лечение! +").append(ultimateHeal).append(" здоровья.");
+                break;
+
+            case BERSERK_RAGE:
+                // Ярость берсерка: много урона, но и сам получает урон
+                int rageDamage = caster.calculateAttackDamage(card.getValue() * 2);
+                target.takeDamage(rageDamage);
+                caster.takeDamage(2); // Сам получает урон
+
+                actionMessage.append("😡 ").append(caster.getCharacter().getName())
+                    .append(" впадает в ярость! Нанесено ").append(rageDamage)
+                    .append(" урона, но сам получил 2 урона.");
+                break;
+
+            case HOLY_LIGHT:
+                // Святой свет: лечение и защита
+                int holyHeal = caster.calculateHealing(card.getValue());
+                caster.heal(holyHeal);
+                caster.addShield(2);
+
+                actionMessage.append("✨ ").append(caster.getCharacter().getName())
+                    .append(" использует святой свет! +").append(holyHeal)
+                    .append(" здоровья и +2 защиты.");
+                break;
+
+            case BACKSTAB:
+                // Удар в спину: игнорирует часть защиты
+                int backstabDamage = caster.calculateAttackDamage(card.getValue());
+                int currentShield = target.getShield();
+                if (currentShield > 0) {
+                    target.setShield(currentShield / 2); // Уменьшает щит вдвое
                 }
-            }
-            case DEFENSE -> {
-                if (byOpponent) opponentShield = Math.min(10, opponentShield + 1);
-                else playerShield = Math.min(10, playerShield + 1);
-            }
-            case HEAL -> {
-                if (byOpponent) opponentHP = Math.min(10, opponentHP + 1);
-                else playerHP = Math.min(10, playerHP + 1);
-            }
+                target.takeDamage(backstabDamage);
+
+                actionMessage.append("🗡️ ").append(caster.getCharacter().getName())
+                    .append(" наносит удар в спину! Пробивает защиту и наносит ")
+                    .append(backstabDamage).append(" урона.");
+                break;
+
+            case FIREBALL:
+                // Огненный шар: урон по всем (в будущем для многопользовательской игры)
+                int fireDamage = caster.calculateAttackDamage(card.getValue());
+                target.takeDamage(fireDamage);
+
+                actionMessage.append("🔥 ").append(caster.getCharacter().getName())
+                    .append(" бросает огненный шар! Нанесено ").append(fireDamage).append(" урона.");
+                break;
+
+            default:
+                // Для других типов карт - базовая атака
+                int defaultDamage = caster.calculateAttackDamage(card.getValue());
+                target.takeDamage(defaultDamage);
+                actionMessage.append(caster.getCharacter().getName()).append(" использует ").append(card.getName());
+                break;
         }
 
-        if (listener != null) listener.onHealthUpdated(playerHP, playerShield, opponentHP, opponentShield);
+        if (listener != null) {
+            listener.onHealthUpdated(
+                player.getHealth(),
+                player.getShield(),
+                opponent.getHealth(),
+                opponent.getShield()
+            );
+            listener.onActionOccurred(actionMessage.toString());
+        }
+
         checkWinCondition();
     }
 
     private void opponentMakesMove() {
         if (gameOver) return;
-        int action = rnd.nextInt(3);
+
+        // Выбираем случайную карту из руки противника (или создаем новую)
         Card card;
-        switch (action) {
-            case 0 -> card = new Card(CardType.ATTACK, "Темный удар");
-            case 1 -> card = new Card(CardType.DEFENSE, "Теневой щит");
-            default -> card = new Card(CardType.HEAL, "Темное зелье");
+        if (!opponent.getHand().isEmpty()) {
+            // Берем случайную карту из руки
+            card = opponent.getHand().get(rnd.nextInt(opponent.getHand().size()));
+            opponent.getHand().remove(card);
+        } else {
+            // Если рука пуста, создаем случайную карту
+            CardType[] types = CardType.values();
+            CardType randomType = types[rnd.nextInt(Math.min(3, types.length))]; // Только базовые типы
+            String[] cardNames = {
+                "Темный удар", "Теневой щит", "Темное зелье",
+                "Удар призрака", "Теневой барьер", "Некротическое зелье"
+            };
+            card = new Card(randomType, cardNames[rnd.nextInt(cardNames.length)]);
         }
+
         playCard(card, true);
     }
 
     private void addRandomCardToHand() {
-        if (playerHand.size() >= 5) {
+        if (player.getHand().size() >= 7) { // Увеличили лимит руки
             if (listener != null) listener.onActionOccurred("Рука полна, карта не взята.");
             return;
         }
-        Card[] possible = {
-            new Card(CardType.ATTACK, "Огненный шар"), new Card(CardType.DEFENSE, "Железный щит"),
-            new Card(CardType.HEAL, "Целебное зелье"), new Card(CardType.ATTACK, "Удар кинжалом"),
-            new Card(CardType.DEFENSE, "Магический барьер"), new Card(CardType.HEAL, "Эликсир жизни")
-        };
-        Card n = possible[rnd.nextInt(possible.length)];
-        playerHand.add(n);
-        if (listener != null) listener.onHandUpdated(new ArrayList<>(playerHand));
+
+        // Создаем случайную карту
+        CardType[] types = CardType.values();
+        CardType randomType = types[rnd.nextInt(types.length)];
+
+        String[] cardNames;
+        switch (randomType) {
+            case ATTACK:
+                cardNames = new String[]{"Огненный шар", "Ледяная стрела", "Молния", "Удар кинжалом", "Ядовитый укус"};
+                break;
+            case DEFEND:
+                cardNames = new String[]{"Железный щит", "Магический барьер", "Доспех дракона", "Эгида защиты", "Священный щит"};
+                break;
+            case HEAL:
+                cardNames = new String[]{"Целебное зелье", "Эликсир жизни", "Нектар здоровья", "Бальзам восстановления", "Настойка выносливости"};
+                break;
+            default:
+                cardNames = new String[]{"Особая карта", "Магический артефакт", "Древний свиток", "Мистическая реликвия"};
+                break;
+        }
+
+        String name = cardNames[rnd.nextInt(cardNames.length)];
+        Card newCard = new Card(randomType, name);
+        player.getHand().add(newCard);
+
+        if (listener != null) {
+            listener.onHandUpdated(new ArrayList<>(player.getHand()));
+            listener.onActionOccurred("🎴 Вы получили новую карту: " + newCard.getName());
+        }
     }
 
     private void checkWinCondition() {
         if (gameOver) return;
-        if (opponentHP <= 0 && playerHP > 0) {
+
+        if (!opponent.isAlive() && player.isAlive()) {
             gameOver = true;
-            if (listener != null) listener.onGameOver(true, playerHP, opponentHP);
-        } else if (playerHP <= 0 && opponentHP > 0) {
+            if (listener != null) listener.onGameOver(true, player.getHealth(), opponent.getHealth());
+        } else if (!player.isAlive() && opponent.isAlive()) {
             gameOver = true;
-            if (listener != null) listener.onGameOver(false, playerHP, opponentHP);
-        } else if (playerHP <= 0 && opponentHP <= 0) {
-            // ничья — считаем поражением игрока
+            if (listener != null) listener.onGameOver(false, player.getHealth(), opponent.getHealth());
+        } else if (!player.isAlive() && !opponent.isAlive()) {
+            // Ничья — считаем поражением игрока
             gameOver = true;
-            if (listener != null) listener.onGameOver(false, playerHP, opponentHP);
+            if (listener != null) listener.onGameOver(false, player.getHealth(), opponent.getHealth());
         }
+    }
+
+    // Геттеры для доступа к игрокам
+    public Player getPlayer() {
+        return player;
+    }
+
+    public Player getOpponent() {
+        return opponent;
+    }
+
+    public void resetGame() {
+        gameOver = false;
+        isPlayerTurn = true;
+        if (player != null) player.resetForNewGame();
+        if (opponent != null) opponent.resetForNewGame();
     }
 }

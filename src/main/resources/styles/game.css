@@ -1,123 +1,457 @@
-/* Основные стили игры */
+/* game.css — ultra modern dark UI (2024+) */
+
+/* ===== ROOT & GLOBAL ===== */
 .root {
-    -fx-font-family: "Arial";
+    -fx-font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    -fx-background-color: linear-gradient(to bottom, #0a0a0a, #070707);
+    -fx-font-smoothing-type: gray;
 }
 
-/* Стили для карт */
-.card-pane {
-    -fx-background-color: linear-gradient(to bottom, #2c3e50, #34495e);
-    -fx-background-radius: 10;
-    -fx-border-radius: 10;
-    -fx-border-color: #7f8c8d;
-    -fx-border-width: 2;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 10, 0, 0, 3);
+/* ===== GLASS MORPHISM BARS ===== */
+.top-bar, .bottom-bar {
+    -fx-background-color:
+        linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.05),
+            rgba(255, 255, 255, 0.02)
+        ),
+        rgba(18, 18, 18, 0.85);
+    -fx-background-radius: 0;
+    -fx-border-color:
+        linear-gradient(
+            to right,
+            transparent 5%,
+            rgba(255, 255, 255, 0.08) 50%,
+            transparent 95%
+        );
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 16 24;
+    -fx-backdrop-filter: blur(12px);
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.4), 16, 0, 0, 4),
+        innershadow(gaussian, rgba(255, 255, 255, 0.03), 0, 0, 0, 1);
+    -fx-alignment: center-left;
+}
+
+/* ===== TYPOGRAPHY SYSTEM ===== */
+.section-title {
+    -fx-text-fill: linear-gradient(to right, #ffb347, #ffcc33);
+    -fx-font-size: 13px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 0.5px;
+    -fx-effect: dropshadow(gaussian, rgba(255, 179, 71, 0.2), 4, 0, 0, 1);
+}
+
+.char-name {
+    -fx-text-fill: #ffecd9;
+    -fx-font-weight: 700;
+    -fx-font-size: 14px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 2, 0, 0, 1);
+}
+
+.hp-label {
+    -fx-text-fill: linear-gradient(to bottom, #4dff88, #00ff66);
+    -fx-font-weight: 800;
+    -fx-font-size: 14px;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 255, 102, 0.25), 6, 0, 0, 2),
+        innershadow(gaussian, rgba(0, 0, 0, 0.3), 1, 0, 0, 0);
+}
+
+.shield-label {
+    -fx-text-fill: #a3d5ff;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-effect: dropshadow(gaussian, rgba(163, 213, 255, 0.25), 4, 0, 0, 1);
+}
+
+.status-label {
+    -fx-text-fill: linear-gradient(to right, #ffd166, #ffb347);
+    -fx-font-weight: 900;
+    -fx-font-size: 20px;
+    -fx-letter-spacing: 1px;
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 209, 102, 0.3), 8, 0, 0, 2),
+        innershadow(gaussian, rgba(0, 0, 0, 0.4), 0, 1, 1, 0);
+}
+
+.action-label {
+    -fx-text-fill: #f5e6d3;
+    -fx-font-style: italic;
+    -fx-font-size: 13px;
+    -fx-opacity: 0.95;
+}
+
+.turn-icon {
+    -fx-text-fill: #ffc145;
+    -fx-font-size: 15px;
+    -fx-font-weight: 900;
+    -fx-effect: dropshadow(gaussian, rgba(255, 193, 69, 0.4), 8, 0, 0, 2);
+}
+
+.timer-label {
+    -fx-text-fill: #fff;
+    -fx-font-weight: 800;
+    -fx-font-size: 16px;
+    -fx-effect: dropshadow(gaussian, rgba(255, 255, 255, 0.3), 6, 0, 0, 2);
+}
+
+.cards-title {
+    -fx-text-fill: linear-gradient(to right, #ffc978, #ffa726);
+    -fx-font-weight: 800;
+    -fx-font-size: 15px;
+    -fx-letter-spacing: 0.8px;
+}
+
+/* ===== CHAT PANEL - NEOMORPHISM ===== */
+.chat-panel {
+    -fx-background-color:
+        linear-gradient(135deg, rgba(15, 15, 16, 0.95), rgba(12, 12, 13, 0.98));
+    -fx-background-radius: 0 20 20 0;
+    -fx-border-color: rgba(255, 255, 255, 0.04);
+    -fx-border-width: 0 0 0 1;
+    -fx-padding: 20;
+    -fx-backdrop-filter: blur(10px);
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.5), 25, 0, 0, 8),
+        innershadow(gaussian, rgba(255, 255, 255, 0.05), 0, 1, 0, 0);
+}
+
+.chat-title {
+    -fx-text-fill: linear-gradient(to right, #ffd166, #ffb347);
+    -fx-font-weight: 900;
+    -fx-font-size: 16px;
+    -fx-letter-spacing: 1px;
+    -fx-padding: 0 0 15 0;
+}
+
+.chat-area {
+    -fx-control-inner-background: rgba(20, 20, 22, 0.95);
+    -fx-text-fill: #f0f0f0;
+    -fx-font-size: 13px;
+    -fx-background-color: rgba(20, 20, 22, 0.95);
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+    -fx-border-color: rgba(255, 255, 255, 0.05);
+    -fx-border-width: 1.5;
+    -fx-padding: 16;
+    -fx-effect: innershadow(gaussian, rgba(0, 0, 0, 0.3), 8, 0, 0, 2);
+}
+
+.chat-input {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(28, 28, 30, 0.95), rgba(24, 24, 26, 0.95));
+    -fx-text-fill: #ffffff;
+    -fx-prompt-text-fill: rgba(255, 255, 255, 0.4);
+    -fx-border-color:
+        linear-gradient(to right,
+        rgba(255, 193, 69, 0.3),
+        rgba(255, 255, 255, 0.1),
+        rgba(255, 193, 69, 0.3));
+    -fx-border-width: 1.5;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-padding: 12 16;
+    -fx-font-size: 13px;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.3), 6, 0, 0, 2),
+        innershadow(gaussian, rgba(255, 255, 255, 0.03), 0, 0, 0, 1);
+}
+
+.chat-input:focused {
+    -fx-border-color:
+        linear-gradient(to right,
+        rgba(255, 193, 69, 0.5),
+        rgba(255, 255, 255, 0.15),
+        rgba(255, 193, 69, 0.5));
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 193, 69, 0.15), 10, 0, 0, 3),
+        innershadow(gaussian, rgba(255, 255, 255, 0.05), 0, 0, 0, 1);
+}
+
+.send-button {
+    -fx-background-color:
+        linear-gradient(135deg, #ffc145, #ff9800);
+    -fx-text-fill: #000;
+    -fx-font-weight: 900;
+    -fx-font-size: 13px;
+    -fx-background-radius: 12;
+    -fx-padding: 12 20;
     -fx-cursor: hand;
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 193, 69, 0.4), 12, 0, 0, 4),
+        innershadow(gaussian, rgba(255, 255, 255, 0.2), 0, 1, 1, 0);
+    -fx-transition: all 0.2s ease;
+}
+
+.send-button:hover {
+    -fx-background-color:
+        linear-gradient(135deg, #ffca28, #ffb300);
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 202, 40, 0.6), 16, 0, 0, 6),
+        innershadow(gaussian, rgba(255, 255, 255, 0.3), 0, 1, 1, 0);
+    -fx-translate-y: -1;
+}
+
+.send-button:pressed {
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 193, 69, 0.3), 8, 0, 0, 2),
+        innershadow(gaussian, rgba(0, 0, 0, 0.2), 0, 1, 1, 0);
+    -fx-translate-y: 0;
+}
+
+/* ===== CARD DESIGN SYSTEM ===== */
+.card-pane {
+    -fx-background-color:
+        linear-gradient(145deg, #1e1a17, #171310);
+    -fx-background-radius: 16;
+    -fx-border-radius: 16;
+    -fx-border-color:
+        linear-gradient(
+            to bottom right,
+            rgba(255, 180, 90, 0.15),
+            rgba(255, 255, 255, 0.05),
+            rgba(255, 180, 90, 0.15)
+        );
+    -fx-border-width: 1.5;
+    -fx-padding: 16;
+    -fx-pref-width: 150;
+    -fx-pref-height: 190;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.5), 20, 0, 0, 8),
+        innershadow(gaussian, rgba(255, 255, 255, 0.03), 0, 1, 1, 0);
+    -fx-cursor: hand;
+    -fx-alignment: center;
+    -fx-transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .card-pane:hover {
-    -fx-border-color: #f39c12;
-    -fx-effect: dropshadow(gaussian, rgba(243, 156, 18, 0.7), 15, 0, 0, 5);
-    -fx-translate-y: -5;
+    -fx-translate-y: -8;
+    -fx-scale-x: 1.03;
+    -fx-scale-y: 1.03;
+    -fx-border-color:
+        linear-gradient(
+            to bottom right,
+            rgba(255, 180, 90, 0.35),
+            rgba(255, 255, 255, 0.1),
+            rgba(255, 180, 90, 0.35)
+        );
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.7), 28, 0, 0, 14),
+        dropshadow(gaussian, rgba(255, 180, 90, 0.2), 20, 0, 0, 8),
+        innershadow(gaussian, rgba(255, 255, 255, 0.05), 0, 1, 1, 0);
 }
 
-.card-pane:pressed {
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);
-    -fx-translate-y: 0;
+.card-emoji {
+    -fx-font-size: 40px;
+    -fx-text-fill: linear-gradient(to bottom, #ff9f71, #ff6b35);
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 159, 113, 0.3), 12, 0, 0, 4),
+        innershadow(gaussian, rgba(255, 255, 255, 0.1), 2, 0, 0, 0);
+    -fx-padding: 4 0 8 0;
 }
 
-.card-pane.disabled {
-    -fx-opacity: 0.5;
-    -fx-cursor: default;
-}
-
-.card-pane.disabled:hover {
-    -fx-border-color: #7f8c8d;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 10, 0, 0, 3);
-    -fx-translate-y: 0;
-}
-
-/* Стили для меток карт */
-.card-label {
-    -fx-text-fill: white;
-    -fx-font-weight: bold;
-    -fx-font-size: 12;
+.card-name {
+    -fx-text-fill: #ffe6cc;
+    -fx-font-weight: 800;
+    -fx-font-size: 14px;
+    -fx-wrap-text: true;
     -fx-text-alignment: center;
+    -fx-line-spacing: 2px;
+    -fx-padding: 8 0 4 0;
 }
 
-.card-type-label {
-    -fx-font-size: 10;
-    -fx-text-alignment: center;
+.card-value {
+    -fx-text-fill: linear-gradient(to bottom, #ffd27a, #ffb347);
+    -fx-font-weight: 900;
+    -fx-font-size: 24px;
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 210, 122, 0.3), 8, 0, 0, 3),
+        innershadow(gaussian, rgba(0, 0, 0, 0.4), 0, 1, 1, 0);
 }
 
-/* Стили для кнопок */
+/* ===== CARD STATES ===== */
+.card-overlay {
+    -fx-fill: radial-gradient(
+        center 50% 50%,
+        radius 80%,
+        rgba(10, 10, 10, 0.7),
+        rgba(5, 5, 5, 0.9)
+    );
+    -fx-arc-width: 20;
+    -fx-arc-height: 20;
+    -fx-effect: gaussian-blur(8);
+    -fx-opacity: 0.9;
+}
+
+.card-badge {
+    -fx-background-color:
+        linear-gradient(135deg, #ffc145, #ff9800);
+    -fx-text-fill: #000;
+    -fx-font-weight: 900;
+    -fx-font-size: 11px;
+    -fx-background-radius: 10;
+    -fx-padding: 6 10;
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 193, 69, 0.5), 8, 0, 0, 3),
+        innershadow(gaussian, rgba(255, 255, 255, 0.2), 0, 1, 1, 0);
+}
+
+/* ===== BUTTONS ===== */
 .button {
-    -fx-background-radius: 5;
-    -fx-border-radius: 5;
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(40, 40, 42, 0.9), rgba(30, 30, 32, 0.9));
+    -fx-border-color:
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    -fx-text-fill: #ffe8c9;
+    -fx-font-weight: 700;
+    -fx-font-size: 13px;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-border-width: 1.5;
+    -fx-padding: 10 18;
     -fx-cursor: hand;
-    -fx-font-weight: bold;
-    -fx-padding: 8 15;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.3), 6, 0, 0, 2),
+        innershadow(gaussian, rgba(255, 255, 255, 0.05), 0, 1, 1, 0);
+    -fx-transition: all 0.2s ease;
 }
 
 .button:hover {
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 8, 0, 0, 3);
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(50, 50, 52, 0.95), rgba(40, 40, 42, 0.95));
+    -fx-border-color:
+        linear-gradient(to bottom, rgba(255, 200, 100, 0.25), rgba(255, 200, 100, 0.15));
+    -fx-text-fill: #fff;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.4), 8, 0, 0, 3),
+        innershadow(gaussian, rgba(255, 255, 255, 0.08), 0, 1, 1, 0);
+    -fx-translate-y: -1;
 }
 
-/* Стили для TextArea (чат) */
-.text-area {
-    -fx-background-radius: 5;
-    -fx-border-radius: 5;
-    -fx-border-color: #555;
-}
-
-.text-area .content {
-    -fx-background-color: #1a1a2e;
-    -fx-background-radius: 5;
-    -fx-padding: 10;
-}
-
-.text-area .scroll-pane {
+/* ===== SCROLLBAR STYLING ===== */
+.scroll-bar {
     -fx-background-color: transparent;
+    -fx-background-radius: 0;
 }
 
-.text-area .scroll-bar:vertical {
+.scroll-bar .thumb {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(180, 140, 80, 0.6), rgba(150, 110, 60, 0.8));
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.3), 4, 0, 0, 1),
+        innershadow(gaussian, rgba(255, 255, 255, 0.1), 0, 1, 1, 0);
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(200, 160, 100, 0.7), rgba(170, 130, 80, 0.9));
+}
+
+.scroll-bar .track {
+    -fx-background-color: rgba(20, 20, 22, 0.95);
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
     -fx-background-color: transparent;
+    -fx-padding: 2;
 }
 
-.text-area .scroll-bar:vertical .thumb {
-    -fx-background-color: #4a4a6d;
-    -fx-background-radius: 5;
+/* ===== SMOOTH ANIMATIONS ===== */
+* {
+    -fx-transition-duration: 200ms;
 }
 
-/* Стили для полей ввода */
-.text-field {
-    -fx-background-color: #2d3047;
-    -fx-text-fill: white;
-    -fx-background-radius: 5;
-    -fx-border-radius: 5;
-    -fx-border-color: #555;
-    -fx-border-width: 1;
-    -fx-padding: 8;
+/* ===== GLOW EFFECTS ===== */
+.glow-effect {
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 193, 69, 0.4), 15, 0, 0, 0),
+        dropshadow(gaussian, rgba(255, 193, 69, 0.2), 30, 0, 0, 0);
 }
 
-.text-field:focused {
-    -fx-border-color: #4CAF50;
+/* Добавьте в конец game.css */
+
+/* ===== DIRECTION INDICATOR ===== */
+.direction-indicator {
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.6), 15, 0, 0, 5),
+        dropshadow(gaussian, rgba(255, 193, 69, 0.15), 25, 0, 0, 0);
 }
 
-/* Стили для разделителей */
-.separator .line {
-    -fx-border-color: #4a4a6d;
-    -fx-border-width: 1;
+.direction-text {
+    -fx-text-fill: linear-gradient(to bottom, #ffd166, #ffb347);
+    -fx-font-size: 28px;
+    -fx-font-weight: 900;
+    -fx-effect:
+        dropshadow(gaussian, rgba(255, 209, 102, 0.4), 10, 0, 0, 3),
+        innershadow(gaussian, rgba(0, 0, 0, 0.4), 1, 0, 0, 0);
 }
 
-/* Анимация пульсации для вашего хода */
-@keyframes pulse {
-    0% { -fx-opacity: 1; }
-    50% { -fx-opacity: 0.7; }
-    100% { -fx-opacity: 1; }
+.attack-power {
+    -fx-text-fill: #4dff88;
+    -fx-font-size: 14px;
+    -fx-font-weight: 800;
+    -fx-effect:
+        dropshadow(gaussian, rgba(77, 255, 136, 0.3), 6, 0, 0, 2),
+        innershadow(gaussian, rgba(0, 0, 0, 0.3), 0, 1, 1, 0);
+}
+/* Добавьте в конец game.css */
+
+/* ===== TACTICAL INDICATOR ===== */
+.tactical-container {
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.6), 15, 0.3, 0, 5),
+        dropshadow(gaussian, rgba(255, 193, 69, 0.15), 25, 0, 0, 0);
 }
 
-.your-turn {
-    -fx-effect: dropshadow(gaussian, rgba(76, 175, 80, 0.7), 10, 0, 0, 0);
-    animation: pulse 1.5s infinite;
+.tactical-indicator {
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.4), 10, 0.2, 0, 3);
+}
+
+.tactical-status {
+    -fx-font-size: 12px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #a3d5ff;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.4), 2, 0, 0, 1);
+}
+
+.advantage-label {
+    -fx-font-size: 14px;
+    -fx-font-weight: 900;
+    -fx-text-fill: #ffd27a;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.5), 3, 0, 0, 1);
+}
+/* ===== VICTORY INDICATOR ===== */
+.victory-container {
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.6), 15, 0.3, 0, 5);
+}
+
+.victory-indicator {
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.4), 10, 0.2, 0, 3);
+}
+
+.victory-percentage {
+    -fx-font-size: 16px;
+    -fx-font-weight: 900;
+    -fx-text-fill: #ffffff;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.8), 3, 0, 0, 1);
+}
+
+.victory-status {
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #a3d5ff;
+    -fx-effect:
+        dropshadow(gaussian, rgba(0, 0, 0, 0.5), 2, 0, 0, 1);
 }

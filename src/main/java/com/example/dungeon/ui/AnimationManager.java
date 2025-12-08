@@ -30,7 +30,7 @@ public class AnimationManager {
 
             switch (card.getType()) {
                 case ATTACK -> { animationColor = Color.rgb(231,76,60,0.8); animationText = "⚔ АТАКА! ⚔"; effectText = "2 УРОНА"; }
-                case DEFENSE -> { animationColor = Color.rgb(52,152,219,0.8); animationText = "🛡 ЗАЩИТА 🛡"; effectText = "+1 ЩИТ"; }
+                case DEFEND -> { animationColor = Color.rgb(52,152,219,0.8); animationText = "🛡 ЗАЩИТА 🛡"; effectText = "+1 ЩИТ"; }
                 case HEAL -> { animationColor = Color.rgb(46,204,113,0.8); animationText = "❤ ЛЕЧЕНИЕ ❤"; effectText = "+1 HP"; }
                 default -> { animationColor = Color.GRAY; animationText = "ДЕЙСТВИЕ"; }
             }
